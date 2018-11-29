@@ -64,5 +64,6 @@ cabal.config
 cmake-build-*/
 
 .DS_Store
-./java-out
+java-out
+out/
 
