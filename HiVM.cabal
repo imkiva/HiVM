@@ -1,0 +1,62 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.31.0.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: 25933132cd049bf22a77a2850b4b93f3fe138b37f76df08a5fc116fcd056b3e1
+
+name:           HiVM
+version:        0.1.0.0
+description:    Please see the README on GitHub at <https://github.com/imkiva/HiVM#readme>
+homepage:       https://github.com/imkiva/HiVM#readme
+bug-reports:    https://github.com/imkiva/HiVM/issues
+author:         Kiva
+maintainer:     libkernelpanic@gmail.com
+copyright:      Copyright (c) 2018 Kiva
+license:        MIT
+license-file:   LICENSE
+build-type:     Simple
+extra-source-files:
+    README.md
+    ChangeLog.md
+
+source-repository head
+  type: git
+  location: https://github.com/imkiva/HiVM
+
+library
+  exposed-modules:
+      Lib
+  other-modules:
+      Paths_HiVM
+  hs-source-dirs:
+      src
+  build-depends:
+      base >=4.7 && <5
+  default-language: Haskell2010
+
+executable HiVM-exe
+  main-is: Main.hs
+  other-modules:
+      Paths_HiVM
+  hs-source-dirs:
+      app
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      HiVM
+    , base >=4.7 && <5
+  default-language: Haskell2010
+
+test-suite HiVM-test
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      Paths_HiVM
+  hs-source-dirs:
+      test
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      HiVM
+    , base >=4.7 && <5
+  default-language: Haskell2010
