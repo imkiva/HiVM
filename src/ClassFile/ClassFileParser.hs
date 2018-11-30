@@ -24,22 +24,23 @@ parseJavaClass = do
   (fieldCount, fields) <- parseFields
   (methodCount, methods) <- parseMethods
   (attrCount, attrs) <- parseAttrs
-  return $ ClassFile
-    majorVersion
-    minorVersion
-    poolCount
-    pool
-    accessFlags
-    thisClass
-    superClass
-    interfaceCount
-    interfaces
-    fieldCount
-    fields
-    methodCount
-    methods
-    attrCount
-    attrs
+  return $
+    ClassFile
+      majorVersion
+      minorVersion
+      poolCount
+      pool
+      accessFlags
+      thisClass
+      superClass
+      interfaceCount
+      interfaces
+      fieldCount
+      fields
+      methodCount
+      methods
+      attrCount
+      attrs
 
 parseClassMagic :: Get ()
 parseClassMagic = do
@@ -50,16 +51,24 @@ parseConstantPool :: Get (Word16, [ClassConstantPoolEntry])
 parseConstantPool = undefined
 
 parseInterfaces :: Get (Word16, [Word16])
-parseInterfaces = undefined
+parseInterfaces = do
+  count <- getWord16
+  return (count, undefined)
 
 parseFields :: Get (Word16, [ClassFileFieldInfo])
-parseFields = undefined
+parseFields = do
+  count <- getWord16
+  return (count, undefined)
 
 parseMethods :: Get (Word16, [ClassFileMethodInfo])
-parseMethods = undefined
+parseMethods = do
+  count <- getWord16
+  return (count, undefined)
 
 parseAttrs :: Get (Word16, [AttributeInfo])
-parseAttrs = undefined
+parseAttrs = do
+  count <- getWord16
+  return (count, undefined)
 
 parseClassFile :: L.ByteString -> ClassFile
 parseClassFile = runGet parseJavaClass
