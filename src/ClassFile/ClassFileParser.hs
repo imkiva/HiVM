@@ -17,21 +17,14 @@ getWord32 = getWord32be
 parseJavaClass :: Get ClassFile
 parseJavaClass = do
   parseClassMagic
-  minorVersion <- getWord16
-  majorVersion <- getWord16
-  poolCount <- getWord16
-  pool <- parseConstantPool
-  accessFlags <- getWord16
-  thisClass <- getWord16
-  superClass <- getWord16
-  interfaceCount <- getWord16
-  interfaces <- parseInterfaces
-  fieldCount <- getWord16
-  fields <- parseFields
-  methodCount <- getWord16
-  methods <- parseMethods
-  attrCount <- getWord16
-  ClassFile
+  [minorVersion, majorVersion] <- replicateM 2 getWord16
+  (poolCount, pool) <- parseConstantPool
+  [accessFlags, thisClass, superClass] <- replicateM 3 getWord16
+  (interfaceCount, interfaces) <- parseInterfaces
+  (fieldCount, fields) <- parseFields
+  (methodCount, methods) <- parseMethods
+  (attrCount, attrs) <- parseAttrs
+  return $ ClassFile
     majorVersion
     minorVersion
     poolCount
@@ -45,27 +38,27 @@ parseJavaClass = do
     fields
     methodCount
     methods
-    attrCount <$>
-    parseAttrs
+    attrCount
+    attrs
 
 parseClassMagic :: Get ()
 parseClassMagic = do
   magic <- getWord32
   when (magic /= 0xCAFEBABE) $ fail "Invalid magic number for Java class, exptected 0xCAFEBABE"
 
-parseConstantPool :: Get [ClassConstantPoolEntry]
+parseConstantPool :: Get (Word16, [ClassConstantPoolEntry])
 parseConstantPool = undefined
 
-parseInterfaces :: Get [Word16]
+parseInterfaces :: Get (Word16, [Word16])
 parseInterfaces = undefined
 
-parseFields :: Get [ClassFileFieldInfo]
+parseFields :: Get (Word16, [ClassFileFieldInfo])
 parseFields = undefined
 
-parseMethods :: Get [ClassFileMethodInfo]
+parseMethods :: Get (Word16, [ClassFileMethodInfo])
 parseMethods = undefined
 
-parseAttrs :: Get [AttributeInfo]
+parseAttrs :: Get (Word16, [AttributeInfo])
 parseAttrs = undefined
 
 parseClassFile :: L.ByteString -> ClassFile
