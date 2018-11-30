@@ -1,2 +1,11 @@
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ExtendedDefaultRules #-}
+{-# LANGUAGE FlexibleInstances    #-}
+
+import           Utils.JavaString
+
+testJavaString :: (JString a) => a -> IO ()
+testJavaString = print . toJavaString
+
 main :: IO ()
-main = putStrLn "Test suite not yet implemented"
+main = testJavaString "hello world"

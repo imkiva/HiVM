@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: a81f9d5efaeb0f1040bafe27e3736e0387670bba6dec990a8c152435ecf01b92
+-- hash: b7a7fa7f28b097c28ecc6594438dc15f47749ece620d56527a22737875ba114c
 
 name:           HiVM
 version:        0.1.0.0
@@ -29,13 +29,14 @@ library
   exposed-modules:
       ClassFile.ClassFile
       ClassFile.Constants
-      Lib
+      Utils.JavaString
   other-modules:
       Paths_HiVM
   hs-source-dirs:
       src
   build-depends:
       base >=4.7 && <5
+    , text >=1.2.3.1
   default-language: Haskell2010
 
 executable HiVM-exe
@@ -48,6 +49,7 @@ executable HiVM-exe
   build-depends:
       HiVM
     , base >=4.7 && <5
+    , text >=1.2.3.1
   default-language: Haskell2010
 
 test-suite HiVM-test
@@ -61,4 +63,5 @@ test-suite HiVM-test
   build-depends:
       HiVM
     , base >=4.7 && <5
+    , text >=1.2.3.1
   default-language: Haskell2010

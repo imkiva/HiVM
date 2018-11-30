@@ -2,7 +2,9 @@
 
 module ClassFile.ClassFile where
 
+import qualified Data.Text        as T
 import           Data.Word
+import           Utils.JavaString
 
 data AttributeInfoHeader = AttributeInfoHeader
   { attributeNameIndex :: Word16
@@ -212,9 +214,28 @@ data ParameterAnnotation = ParameterAnnotation
   , paramAnnotations     :: [CFValue]
   }
 
-data ClassConstantPoolEntry = ClassConstantPoolEntry
-  {
-  }
+data ClassConstantPoolEntry
+  = CPClass { cpNameIndex :: Word16 }
+  | CPFieldRef { cpClassIndex       :: Word16
+               , cpNameAndTypeIndex :: Word16 }
+  | CPMethodRef { cpClassIndex       :: Word16
+                , cpNameAndTypeIndex :: Word16 }
+  | CPInterfaceMethodRef { cpClassIndex       :: Word16
+                         , cpNameAndTypeIndex :: Word16 }
+  | CPString { cpStringIndex :: Word16 }
+  | CPInteger { cpConstantInt :: Word16 }
+  | CPFloat { cpConstantFloat :: Word16 }
+  | CPLong { cpConstantLong :: Word16 }
+  | CPDouble { cpConstantDouble :: Word16 }
+  | CPNameAndType { cpNameIndex       :: Word16
+                  , cpDescriptorIndex :: Word16 }
+  | CPUtf8 { cpLength :: Word16
+           , cpString :: JavaString }
+  | CPMethodHandle { cpRefKind  :: Word8
+                   , cpRefIndex :: Word16 }
+  | CPMethodType { cpDescriptorIndex :: Word16 }
+  | CPInvokeDynamic { cpBootstrapMethodAttrIndex :: Word16
+                    , cpNameAndTypeIndex         :: Word16 }
 
 data ClassFileFieldInfo = ClassFileFieldInfo
   { fieldInfoAccessFlag      :: Word16

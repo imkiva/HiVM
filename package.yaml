@@ -21,6 +21,7 @@ description:         Please see the README on GitHub at <https://github.com/imki
 
 dependencies:
 - base >= 4.7 && < 5
+- text >= 1.2.3.1
 
 library:
   source-dirs: src
