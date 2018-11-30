@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: cd9a750bbe82ba953708f883ea56837a3991e69440ca8b10f62d4ece2288ddde
+-- hash: efa970e7d038479388d6580c742e5813baf4945f6f708eb7dfcd1e6c6ba94c24
 
 name:           HiVM
 version:        0.1.0.0
@@ -27,20 +27,26 @@ source-repository head
 
 library
   exposed-modules:
-      ClassFile.ClassFile
-      ClassFile.ClassFileParser
-      ClassFile.Constants
-      Utils.JavaString
+      ClassPath.CFG
+      ClassPath.ClassFileParser
+      ClassPath.Common
+      ClassPath.JarReader
   other-modules:
       Paths_HiVM
   hs-source-dirs:
       src
+  ghc-options: -Wall
   build-depends:
-      base >=4.7 && <5
-    , binary >=0.8.5.1
-    , bytestring >=0.10.8.2
-    , mtl >=2.2.2
-    , text >=1.2.3.1
+      array
+    , base >=4.7 && <5
+    , binary
+    , bytestring
+    , containers
+    , data-binary-ieee754
+    , fgl
+    , fingertree
+    , pretty
+    , zlib
   default-language: Haskell2010
 
 executable HiVM-exe
@@ -49,14 +55,19 @@ executable HiVM-exe
       Paths_HiVM
   hs-source-dirs:
       app
-  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       HiVM
+    , array
     , base >=4.7 && <5
-    , binary >=0.8.5.1
-    , bytestring >=0.10.8.2
-    , mtl >=2.2.2
-    , text >=1.2.3.1
+    , binary
+    , bytestring
+    , containers
+    , data-binary-ieee754
+    , fgl
+    , fingertree
+    , pretty
+    , zlib
   default-language: Haskell2010
 
 test-suite HiVM-test
@@ -66,12 +77,17 @@ test-suite HiVM-test
       Paths_HiVM
   hs-source-dirs:
       test
-  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       HiVM
+    , array
     , base >=4.7 && <5
-    , binary >=0.8.5.1
-    , bytestring >=0.10.8.2
-    , mtl >=2.2.2
-    , text >=1.2.3.1
+    , binary
+    , bytestring
+    , containers
+    , data-binary-ieee754
+    , fgl
+    , fingertree
+    , pretty
+    , zlib
   default-language: Haskell2010

@@ -21,10 +21,18 @@ description:         Please see the README on GitHub at <https://github.com/imki
 
 dependencies:
 - base >= 4.7 && < 5
-- text >= 1.2.3.1
-- bytestring >= 0.10.8.2
-- mtl >= 2.2.2
-- binary >=  0.8.5.1
+- fgl
+- fingertree
+- zlib
+- pretty
+- array
+- binary
+- bytestring
+- containers
+- data-binary-ieee754
+
+
+ghc-options: -Wall
 
 library:
   source-dirs: src
