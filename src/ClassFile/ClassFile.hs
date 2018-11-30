@@ -254,8 +254,7 @@ data ClassFileMethodInfo = ClassFileMethodInfo
   }
 
 data ClassFile = ClassFile
-  { classFileMagic               :: Word32
-  , classFileMajorVersion        :: Word16
+  { classFileMajorVersion        :: Word16
   , classFileMinorVersion        :: Word16
   , classFileConstantPoolCount   :: Word16
   , classFileConstantPoolEntries :: [ClassConstantPoolEntry]
