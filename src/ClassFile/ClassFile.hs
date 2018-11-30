@@ -4,26 +4,6 @@ module ClassFile.ClassFile where
 
 import           Data.Word
 
-data ClassConstantPoolEntry = ClassConstantPoolEntry
-  {
-  }
-
-data ClassFileFieldInfo = ClassFileFieldInfo
-  { fieldInfoAccessFlag      :: Word16
-  , fieldInfoNameIndex       :: Word16
-  , fieldInfoDescriptorIndex :: Word16
-  , fieldInfoAttributeCount  :: Word16
-  , fieldInfoAttributes      :: [AttributeInfo]
-  }
-
-data ClassFileMethodInfo = ClassFileMethodInfo
-  { methodInfoAccessFlag      :: Word16
-  , methodInfoNameIndex       :: Word16
-  , methodInfoDescriptorIndex :: Word16
-  , methodInfoAttributeCount  :: Word16
-  , methodInfoAttributes      :: [AttributeInfo]
-  }
-
 data AttributeInfoHeader = AttributeInfoHeader
   { attributeNameIndex :: Word16
   , attributeLength    :: Word32
@@ -230,6 +210,26 @@ data TypeAnnotation = TypeAnnotation
 data ParameterAnnotation = ParameterAnnotation
   { paramAnnotationCount :: Word16
   , paramAnnotations     :: [CFValue]
+  }
+
+data ClassConstantPoolEntry = ClassConstantPoolEntry
+  {
+  }
+
+data ClassFileFieldInfo = ClassFileFieldInfo
+  { fieldInfoAccessFlag      :: Word16
+  , fieldInfoNameIndex       :: Word16
+  , fieldInfoDescriptorIndex :: Word16
+  , fieldInfoAttributeCount  :: Word16
+  , fieldInfoAttributes      :: [AttributeInfo]
+  }
+
+data ClassFileMethodInfo = ClassFileMethodInfo
+  { methodInfoAccessFlag      :: Word16
+  , methodInfoNameIndex       :: Word16
+  , methodInfoDescriptorIndex :: Word16
+  , methodInfoAttributeCount  :: Word16
+  , methodInfoAttributes      :: [AttributeInfo]
   }
 
 data ClassFile = ClassFile
