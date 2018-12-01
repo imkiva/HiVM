@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: efa970e7d038479388d6580c742e5813baf4945f6f708eb7dfcd1e6c6ba94c24
+-- hash: f6731524ca68e87e234d7eba6e4c83b52ec425917e764ebc277d0c3f235a9d46
 
 name:           HiVM
 version:        0.1.0.0
@@ -27,9 +27,9 @@ source-repository head
 
 library
   exposed-modules:
-      ClassPath.CFG
       ClassPath.ClassFileParser
       ClassPath.Common
+      ClassPath.ControlFlowGraph
       ClassPath.JarReader
   other-modules:
       Paths_HiVM

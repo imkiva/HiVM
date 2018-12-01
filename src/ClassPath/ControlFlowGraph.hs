@@ -2,16 +2,16 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings          #-}
 
-module ClassPath.CFG
+module ClassPath.ControlFlowGraph
     -- * Basic blocks
     -- $basicblocks
   ( BasicBlock
   , bbId
   , bbInsts
   , BBId(..)
-  , ppBBId
+  , prettyBBId
     -- * Control flow graphs
-  , CFG
+  , ControlFlowGraph
   , bbById
   , bbByPC
   , nextPC
@@ -20,8 +20,8 @@ module ClassPath.CFG
   , cfgInstByPC
   , succs
     -- * Pretty printing
-  , ppBB
-  , ppInst
+  , prettyBasicBlock
+  , prettyInstString
   , cfgToDot
     -- * Post dominators
   , isImmediatePostDominator
@@ -46,7 +46,7 @@ import           ClassPath.Common
 -- import Debug.Trace
 --------------------------------------------------------------------------------
 -- Control flow graph construction
-data CFG = CFG
+data ControlFlowGraph = ControlFlowGraph
   { bbById  :: BBId -> Maybe BasicBlock
   , bbByPC  :: PC -> Maybe BasicBlock
   , nextPC  :: PC -> Maybe PC
@@ -68,17 +68,11 @@ exitBlock = BB BBIdExit []
 -- | Build a control-flow graph from an instruction stream.
 --   We assume that the first instruction in the instruction stream is the only
 --   external entry point in the sequence (typically, the method entry point).
-buildCFG :: ExceptionTable -> InstructionStream -> CFG
-buildCFG extbl istrm
-  -- trace ("calculated branch targets: " ++ show btm) $
-  -- trace ("BBs:\n" ++ unlines (map ppBB (DF.toList finalBlocks))) cfg `seq`
-  -- trace ("bbSuccs = " ++ show (bbSuccs cfg)) $
-  -- trace ("bbPreds = " ++ show (map (\(a,b) -> (b,a)) (bbSuccs cfg))) $
-  -- trace (render $ text "pdoms:" <+> vcat (map (\(n, pds) -> ppBBId n <+> (brackets . sep . punctuate comma . map ppBBId $ pds)) (M.toList (pdoms cfg)))) $
- = cfg
+buildCFG :: ExceptionTable -> InstructionStream -> ControlFlowGraph
+buildCFG extbl istrm = cfg
   where
     cfg =
-      CFG
+      ControlFlowGraph
         { bbByPC =
             \pc ->
               if pc < firstPC || pc > lastPC
@@ -185,7 +179,7 @@ buildCFG extbl istrm
 --  trace ("dot:\n" ++ dot) $
 -- | We want to keep the node map around to look up specific nodes
 --   later, even though I think we only do that once
-buildGraph :: CFG -> (Gr BBId (), NodeMap BBId)
+buildGraph :: ControlFlowGraph -> (Gr BBId (), NodeMap BBId)
 buildGraph cfg = (mkGraph ns es, nm)
   where
     (ns, nm) = mkNodes new (map bbId . allBBs $ cfg)
@@ -195,11 +189,11 @@ buildGraph cfg = (mkGraph ns es, nm)
 
 -- | @isImmediatePostDominator g x y@ returns @True@ if @y@
 --   immediately post-dominates @x@ in control-flow graph @g@.
-isImmediatePostDominator :: CFG -> BBId -> BBId -> Bool
+isImmediatePostDominator :: ControlFlowGraph -> BBId -> BBId -> Bool
 isImmediatePostDominator cfg bb bb' = maybe False (== bb') . M.lookup bb . ipdoms $ cfg
 
 -- | Calculate the post-dominators of a given basic block.
-getPostDominators :: CFG -> BBId -> [BBId]
+getPostDominators :: ControlFlowGraph -> BBId -> [BBId]
 getPostDominators cfg bb = M.findWithDefault [] bb (pdoms cfg)
 
 --------------------------------------------------------------------------------
@@ -227,8 +221,8 @@ data BBId
   | BBId PC
   deriving (Eq, Ord, Show)
 
-ppBBId :: BBId -> Doc
-ppBBId bbid =
+prettyBBId :: BBId -> Doc
+prettyBBId bbid =
   case bbid of
     BBIdEntry -> "BB%entry"
     BBIdExit  -> "BB%exit"
@@ -260,12 +254,12 @@ data BBInfo = BBInfo
 -- instructions that can raise exceptions in the presence of a handler for the
 -- time being.
 processInst ::
-     Bool -- ^ Is the given instruction a leader?
-  -> Bool -- ^ Is the given instruction a branch?
-  -> PC -- ^ Value of first PC in instruction sequence
-  -> PC -- ^ Value of last PC in instruction sequence
-  -> (PC, Instruction) -- ^ Current PC and instruction
-  -> BBInfo -- ^ BB accumulator
+     Bool -- | Is the given instruction a leader?
+  -> Bool -- | Is the given instruction a branch?
+  -> PC -- | Value of first PC in instruction sequence
+  -> PC -- | Value of last PC in instruction sequence
+  -> (PC, Instruction) -- | Current PC and instruction
+  -> BBInfo -- | BB accumulator
   -> BBInfo
 processInst isLeader isBranchInst firstPC lastPC (pc, inst) bbi =
   let bbi' =
@@ -343,11 +337,13 @@ type XferF state acc = acc -> state -> (acc, [state])
 
 -- | A simple worklist-based propagator for dataflow analysis
 doFlow ::
-     (Eq state, Ord state) {-, Show state-}
-  => XferF state acc -- ^ the state transfer function
-  -> Map state () -- ^ the seen states map
-  -> [state] -- ^ states worklist
-  -> acc -- ^ accumulated dataflow result
+     ( Eq state
+     , Ord state {-, Show state-}
+     )
+  => XferF state acc -- | the state transfer function
+  -> Map state () -- | the seen states map
+  -> [state] -- | states worklist
+  -> acc -- | accumulated dataflow result
   -> acc
 doFlow _ _ [] acc = acc
 doFlow xfer seen !(curr:rem) !acc =
@@ -414,7 +410,7 @@ terminatorPC BB {bbInsts = []} = error "internal: terminatorPC on empty BB"
 terminatorPC bb                = fst . last . bbInsts $ bb
 
 -- | Fetch an instruction from a CFG by position.
-cfgInstByPC :: CFG -> PC -> Maybe Instruction
+cfgInstByPC :: ControlFlowGraph -> PC -> Maybe Instruction
 cfgInstByPC cfg pc = bbByPC cfg pc >>= flip bbInstByPC pc
 
 bbInstByPC :: BasicBlock -> PC -> Maybe Instruction
@@ -443,35 +439,36 @@ modErr msg = error $ "Language.JVM.CFG: " ++ msg
 
 --------------------------------------------------------------------------------
 -- Pretty-printing
-ppBB :: BasicBlock -> String
-ppBB bb =
-  "BB(" ++
-  show (bbId bb) ++ "):\n" ++ unlines (map (\(pc, inst) -> "  " ++ show pc ++ ": " ++ ppInst inst) (bbInsts bb))
+prettyBasicBlock :: BasicBlock -> String
+prettyBasicBlock bb =
+  "BasicBlock(" ++
+  show (bbId bb) ++
+  "):\n" ++ unlines (map (\(pc, inst) -> "  " ++ show pc ++ ": " ++ prettyInstString inst) (bbInsts bb))
 
-ppInst :: Instruction -> String
-ppInst (Invokevirtual (ClassType cn) mk) = "Invokevirtual " ++ ppNm cn mk
-ppInst (Invokespecial (ClassType cn) mk) = "Invokespecial " ++ ppNm cn mk
-ppInst (Invokestatic cn mk) = "Invokestatic " ++ ppNm cn mk
-ppInst (Invokeinterface cn mk) = "Invokeinterface " ++ ppNm cn mk
-ppInst (Getfield fldId) = "Getfield " ++ ppFldId fldId
-ppInst (Putfield fldId) = "Putfield " ++ ppFldId fldId
-ppInst (New cn) = "New " ++ slashesToDots (unClassName cn)
-ppInst (Ldc (String s)) = "Ldc (String " ++ "\"" ++ s ++ "\")"
-ppInst (Ldc (ClassRef cn)) = "Ldc (ClassRef " ++ slashesToDots (unClassName cn) ++ ")"
-ppInst (Getstatic fldId) = "Getstatic " ++ ppFldId fldId
-ppInst (Putstatic fldId) = "Putstatic " ++ ppFldId fldId
-ppInst i = show i
+prettyInstString :: Instruction -> String
+prettyInstString (Invokevirtual (JavaClassType cn) mk) = "Invokevirtual " ++ prettyMethodKeyString cn mk
+prettyInstString (Invokespecial (JavaClassType cn) mk) = "Invokespecial " ++ prettyMethodKeyString cn mk
+prettyInstString (Invokestatic cn mk) = "Invokestatic " ++ prettyMethodKeyString cn mk
+prettyInstString (Invokeinterface cn mk) = "Invokeinterface " ++ prettyMethodKeyString cn mk
+prettyInstString (Getfield fieldId) = "Getfield " ++ prettyFieldId fieldId
+prettyInstString (Putfield fieldId) = "Putfield " ++ prettyFieldId fieldId
+prettyInstString (New cn) = "New " ++ slashesToDots (unpackClassName cn)
+prettyInstString (Ldc (String s)) = "Ldc (String " ++ "\"" ++ s ++ "\")"
+prettyInstString (Ldc (ClassRef cn)) = "Ldc (ClassRef " ++ slashesToDots (unpackClassName cn) ++ ")"
+prettyInstString (Getstatic fieldId) = "Getstatic " ++ prettyFieldId fieldId
+prettyInstString (Putstatic fieldId) = "Putstatic " ++ prettyFieldId fieldId
+prettyInstString i = show i
 
-ppNm :: ClassName -> MethodKey -> String
-ppNm cn mk = slashesToDots (unClassName cn) ++ "." ++ methodKeyName mk
+prettyMethodKeyString :: JavaClassName -> MethodId -> String
+prettyMethodKeyString cn mk = slashesToDots (unpackClassName cn) ++ "." ++ methodIdName mk
 
 --------------------------------------------------------------------------------
 -- .dot output
 -- | Render the CFG of a method into Graphviz .dot format
 cfgToDot ::
      ExceptionTable
-  -> CFG
-  -> String -- ^ method name
+  -> ControlFlowGraph
+  -> String -- | method name
   -> String
 cfgToDot extbl cfg methodName =
   "digraph methodcfg {" ++
@@ -486,10 +483,10 @@ cfgToDot extbl cfg methodName =
     qnl = "\\n"
     renderBB bb =
       nm (bbId bb) ++
-      " [ shape=record, label=\"{" ++ intercalate qnl (ppLabel bb : map ppEntry (bbInsts bb)) ++ "}\" ];"
+      " [ shape=record, label=\"{" ++ intercalate qnl (prettyLabel bb : map prettyEntry (bbInsts bb)) ++ "}\" ];"
     renderEdge (src, snk) = nm src ++ " -> " ++ nm snk ++ ";"
-    ppEntry (pc, i) = show pc ++ ": " ++ ppInst i
-    ppLabel bb = nm (bbId bb) ++ ": " ++ exhText bb
+    prettyEntry (pc, i) = show pc ++ ": " ++ prettyInstString i
+    prettyLabel bb = nm (bbId bb) ++ ": " ++ exhText bb
     exhText bb =
       case map snd . filter (p . fst) $ exhLabels of
         []     -> ""
@@ -508,10 +505,10 @@ cfgToDot extbl cfg methodName =
 
 --------------------------------------------------------------------------------
 -- Instances
-instance Show CFG where
+instance Show ControlFlowGraph where
   show cfg = "CFG{ allBBs = " ++ show (allBBs cfg) ++ " }" -- unlines $ map show $ allBBs cfg
 
-instance Eq CFG where
+instance Eq ControlFlowGraph where
   cfg1 == cfg2 = allBBs cfg1 == allBBs cfg2 && bbSuccs cfg1 == bbSuccs cfg2
 
 instance Eq BasicBlock where

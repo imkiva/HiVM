@@ -31,7 +31,7 @@ import           ClassPath.ClassFileParser
 -- | Datatype representing a collection of .jar archives.
 --   Classfiles can be loaded from a JarReader using 'loadClassFromJar'.
 newtype JarReader = JR
-  { unJR :: Map ByteString (FilePath, DirEnt)
+  { unJR :: Map ByteString (FilePath, DirEntry)
   } deriving (Show)
 
 -- | Print all the directory entries known to this JarReader
@@ -43,19 +43,19 @@ emptyJarReader :: JarReader
 emptyJarReader = JR (M.empty)
 
 -- | List all of the classes contained in the 'JarReader'
-jarClasses :: JarReader -> [ClassName]
-jarClasses = map (mkClassName . unpack) . M.keys . unJR
+jarClasses :: JarReader -> [JavaClassName]
+jarClasses = map (packClassName . unpack) . M.keys . unJR
 
 -- | Load a class from the given JarReader.
 loadClassFromJar ::
-     ClassName -- ^ Class name to load
+     JavaClassName -- ^ Class name to load
   -> JarReader
-  -> IO (Maybe Class)
+  -> IO (Maybe JavaClass)
 loadClassFromJar clNm jr = do
   let k =
         pack $
-        unClassName clNm ++
-        (if ".class" `L.isSuffixOf` unClassName clNm
+        unpackClassName clNm ++
+        (if ".class" `L.isSuffixOf` unpackClassName clNm
            then ""
            else ".class")
   case M.lookup k (unJR jr) of
@@ -114,14 +114,14 @@ addJar jr fn = do
 
 -- | NB: We expect that the given class files do not have the (un)compressed
 -- sizes stored in the data descriptor segment.
-checkBitFlagAndSizes :: DirEnt -> DirEnt
+checkBitFlagAndSizes :: DirEntry -> DirEntry
 checkBitFlagAndSizes d =
   if (dentBitFlag d .&. 0x8 == 0 || (dentCompSz d > 0 && dentUncompSz d > 0))
     then d
     else ddSizesNotSupported
 
 -- A central directory entry
-data DirEnt = DirEnt
+data DirEntry = DirEntry
   { dentBitFlag     :: !Word16
   , dentCompMethod  :: !Word16
   , dentCompSz      :: !Word32
@@ -132,7 +132,7 @@ data DirEnt = DirEnt
   , dentFilename    :: !ByteString
   } deriving (Show)
 
-dirEnt :: Get DirEnt
+dirEnt :: Get DirEntry
 dirEnt = do
   sig <- getWord32le
   CE.assert (sig == dirEntSig) $ return ()
@@ -157,7 +157,7 @@ dirEnt = do
   fname <- getLazyByteString (fromIntegral fnameLen)
   skip (fromIntegral xfldLen) -- extra field
   skip cmntLen -- file comment
-  return $ DirEnt bitFlag compMeth compSz uncompSz relOff fnameLen xfldLen fname
+  return $ DirEntry bitFlag compMeth compSz uncompSz relOff fnameLen xfldLen fname
 
 --   when (bitFlag .&. 0x8 /= 0 && (uncompSz == 0 || compSz == 0)) $ do
 --      trace ("viol: " ++ show fname ++ ", uncompSz = " ++ show uncompSz) $ return ()
@@ -169,7 +169,7 @@ data DirEnd = DirEnd
   , dendEntryCnt     :: !Word16
   , dendDirSize      :: !Word32
   , dendDirStartOff  :: !Word32
-  , _dendComment     :: !(Maybe ByteString)
+  , dendComment     :: !(Maybe ByteString)
   } deriving (Show)
 
 dirEnd :: Get DirEnd

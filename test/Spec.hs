@@ -1,11 +1,10 @@
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ExtendedDefaultRules #-}
 {-# LANGUAGE FlexibleInstances    #-}
+{-# LANGUAGE OverloadedStrings    #-}
 
-import           Utils.JavaString
-
-testJavaString :: (JString a) => a -> IO ()
-testJavaString = print . toJavaString
+import           ClassPath.ClassFileParser
 
 main :: IO ()
-main = testJavaString "hello world"
+main = do
+  cl <- loadClass "/Users/kiva/Documents/CLionProjects/KivaVM/java-out/com/imkiva/kivm/ChineseTest.class"
+  putStrLn $ prettyClass cl

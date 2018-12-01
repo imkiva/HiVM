@@ -1,40 +1,17 @@
 module ClassPath.ClassFileParser
   -- * Class declarations
-  ( Class
-  , className
-  , superClass
-  , classIsPublic
-  , classIsFinal
-  , classIsInterface
-  , classIsAbstract
-  , classHasSuperAttribute
-  , classInterfaces
-  , classFields
+  ( JavaClass(..)
   , classMethods
-  , classAttributes
   , loadClass
   , lookupMethod
-  , showClass
+  , prettyClass
   , getClass
   -- * Field declarations
-  , Field
+  , JavaField(..)
   , Visibility(..)
   , Attribute(..)
-  , fieldName
-  , fieldType
-  , fieldVisibility
-  , fieldIsStatic
-  , fieldIsFinal
-  , fieldIsVolatile
-  , fieldIsTransient
-  , fieldConstantValue
-  , fieldIsSynthetic
-  , fieldIsDeprecated
-  , fieldIsEnum
-  , fieldSignature
-  , fieldAttributes
   -- * Method declarations
-  , Method
+  , JavaMethod(..)
   , methodName
   , methodParameterTypes
   , methodParameterIndexes
@@ -43,13 +20,10 @@ module ClassPath.ClassFileParser
   , methodMaxLocals
   , methodIsNative
   , methodIsAbstract
-  , methodBody
   , MethodBody(..)
   , methodExceptionTable
-  , methodKey
-  , methodIsStatic
-  , MethodKey(..)
-  , makeMethodKey
+  , MethodId(..)
+  , makeMethodId
   -- ** Instruction declarations
   , LocalVariableIndex
   , LocalVariableTableEntry(..)
@@ -63,16 +37,15 @@ module ClassPath.ClassFileParser
   , endPc
   , handlerPc
   -- ** Misc utility functions/values
-  , byteArrayTy
-  , charArrayTy
-  , getElemTy
-  , intArrayTy
-  , stringTy
+  , javaByteArrayType
+  , javaCharArrayType
+  , getElemType
+  , javaIntArrayType
+  , javaStringType
   , unparseMethodDescriptor
-  , mainKey
+  , mainMethodId
   -- * Debugging information
   , hasDebugInfo
-  , classSourceFile
   , sourceLineNumberInfo
   , sourceLineNumberOrPrev
   , lookupLineStartPC
@@ -80,46 +53,46 @@ module ClassPath.ClassFileParser
   , localVariableEntries
   , lookupLocalVariableByIdx
   , lookupLocalVariableByName
-  , ppInst
+  , prettyInst
   , slashesToDots
   , cfgToDot
   -- * Re-exports
   -- ** Types
-  , Type(..)
-  , isIValue
+  , JavaType(..)
+  , equivToInt32
   , isPrimitiveType
   , stackWidth
   , isFloatType
   , isRefType
   -- ** Instructions
-  , FieldId(..)
+  , JavaFieldId(..)
   , Instruction(..)
   -- ** Class names
-  , ClassName
-  , mkClassName
-  , unClassName
+  , JavaClassName
+  , packClassName
+  , unpackClassName
   , ConstantPoolValue(..)
   ) where
 
-import           Control.Exception    (assert)
+import           Control.Exception          (assert)
 import           Control.Monad
-import           Data.Array           (Array, listArray, (!))
+import           Data.Array                 (Array, listArray, (!))
 import           Data.Binary
 import           Data.Binary.Get
 import           Data.Binary.IEEE754
 import           Data.Bits
-import qualified Data.ByteString      as B
-import qualified Data.ByteString.Lazy as L
+import qualified Data.ByteString            as B
+import qualified Data.ByteString.Lazy       as L
 import           Data.Char
 import           Data.Int
 import           Data.List
-import           Data.Map             (Map)
-import qualified Data.Map             as Map
-import           Prelude              hiding (read)
+import           Data.Map                   (Map)
+import qualified Data.Map                   as Map
+import           Prelude                    hiding (read)
 import           System.IO
 
-import           ClassPath.CFG
 import           ClassPath.Common
+import           ClassPath.ControlFlowGraph
 
 -- Version of replicate with arguments convoluted for parser.
 replicateN :: (Integral b, Monad m) => m a -> b -> m [a]
@@ -132,21 +105,21 @@ showOnNewLines n (a:rest) = replicate n ' ' ++ a ++ "\n" ++ showOnNewLines n res
 
 ----------------------------------------------------------------------
 -- Type
-parseTypeDescriptor :: String -> (Type, String)
-parseTypeDescriptor ('B':rest) = (ByteType, rest)
-parseTypeDescriptor ('C':rest) = (CharType, rest)
-parseTypeDescriptor ('D':rest) = (DoubleType, rest)
-parseTypeDescriptor ('F':rest) = (FloatType, rest)
-parseTypeDescriptor ('I':rest) = (IntType, rest)
-parseTypeDescriptor ('J':rest) = (LongType, rest)
+parseTypeDescriptor :: String -> (JavaType, String)
+parseTypeDescriptor ('B':rest) = (JavaByteType, rest)
+parseTypeDescriptor ('C':rest) = (JavaCharType, rest)
+parseTypeDescriptor ('D':rest) = (JavaDoubleType, rest)
+parseTypeDescriptor ('F':rest) = (JavaFloatType, rest)
+parseTypeDescriptor ('I':rest) = (JavaIntType, rest)
+parseTypeDescriptor ('J':rest) = (JavaLongType, rest)
 parseTypeDescriptor ('L':rest) = split rest []
   where
-    split (';':rest') result = (ClassType (mkClassName (reverse result)), rest')
+    split (';':rest') result = (JavaClassType (packClassName (reverse result)), rest')
     split (ch:rest') result = split rest' (ch : result)
     split _ _ = error "internal: unable to parse type descriptor"
-parseTypeDescriptor ('S':rest) = (ShortType, rest)
-parseTypeDescriptor ('Z':rest) = (BooleanType, rest)
-parseTypeDescriptor ('[':rest) = (ArrayType tp, result)
+parseTypeDescriptor ('S':rest) = (JavaShortType, rest)
+parseTypeDescriptor ('Z':rest) = (JavaBooleanType, rest)
+parseTypeDescriptor ('[':rest) = (JavaArrayType tp, result)
   where
     (tp, result) = parseTypeDescriptor rest
 parseTypeDescriptor st = error ("Unexpected type descriptor string " ++ st)
@@ -169,7 +142,7 @@ instance Show Visibility where
 
 ----------------------------------------------------------------------
 -- Method descriptors
-parseMethodDescriptor :: String -> (Maybe Type, [Type])
+parseMethodDescriptor :: String -> (Maybe JavaType, [JavaType])
 parseMethodDescriptor ('(':rest) = impl rest []
   where
     impl ")V" types = (Nothing, reverse types)
@@ -179,32 +152,32 @@ parseMethodDescriptor ('(':rest) = impl rest []
        in impl rest' (tp : types)
 parseMethodDescriptor _ = error "internal: unable to parse method descriptor"
 
-unparseMethodDescriptor :: MethodKey -> String
-unparseMethodDescriptor (MethodKey _ paramTys retTy) =
+unparseMethodDescriptor :: MethodId -> String
+unparseMethodDescriptor (MethodId _ paramTys retTy) =
   "(" ++ concatMap tyToDesc paramTys ++ ")" ++ maybe "V" tyToDesc retTy
   where
-    tyToDesc (ArrayType ty) = "[" ++ tyToDesc ty
-    tyToDesc BooleanType    = "Z"
-    tyToDesc ByteType       = "B"
-    tyToDesc CharType       = "C"
-    tyToDesc (ClassType cn) = "L" ++ unClassName cn ++ ";"
-    tyToDesc DoubleType     = "D"
-    tyToDesc FloatType      = "F"
-    tyToDesc IntType        = "I"
-    tyToDesc LongType       = "J"
-    tyToDesc ShortType      = "S"
+    tyToDesc (JavaArrayType ty) = "[" ++ tyToDesc ty
+    tyToDesc JavaBooleanType    = "Z"
+    tyToDesc JavaByteType       = "B"
+    tyToDesc JavaCharType       = "C"
+    tyToDesc (JavaClassType cn) = "L" ++ unpackClassName cn ++ ";"
+    tyToDesc JavaDoubleType     = "D"
+    tyToDesc JavaFloatType      = "F"
+    tyToDesc JavaIntType        = "I"
+    tyToDesc JavaLongType       = "J"
+    tyToDesc JavaShortType      = "S"
 
 -- | Returns method key with the given name and descriptor.
-makeMethodKey ::
+makeMethodId ::
      String -- ^ Method name
   -> String -- ^ Method descriptor
-  -> MethodKey
-makeMethodKey name descriptor = MethodKey name parameters returnType
+  -> MethodId
+makeMethodId name descriptor = MethodId name parameters returnType
   where
     (returnType, parameters) = parseMethodDescriptor descriptor
 
-mainKey :: MethodKey
-mainKey = makeMethodKey "main" "([Ljava/lang/String;)V"
+mainMethodId :: MethodId
+mainMethodId = makeMethodId "main" "([Ljava/lang/String;)V"
 
 ----------------------------------------------------------------------
 -- ConstantPool
@@ -251,67 +224,66 @@ getJavaString _ = error "internal: unable to parse byte array for Java string"
 getConstantPoolInfo :: Get [ConstantPoolInfo]
 getConstantPoolInfo = do
   tag <- getWord8
-  case tag
-    -- CONSTANT_Utf8
-        of
-    1 -> do
+  case tag of
+    1 -- CONSTANT_Utf8
+     -> do
       bytes <- replicateN getWord8 =<< getWord16be
       return [Utf8 $ getJavaString bytes]
-    ---- CONSTANT_Integer
-    3 -> do
+    3 ---- CONSTANT_Integer
+     -> do
       val <- get
       return [ConstantInteger val]
-    ---- CONSTANT_Float
-    4 -> do
+    4 ---- CONSTANT_Float
+     -> do
       v <- getFloat32be
       return [ConstantFloat v]
-    ---- CONSTANT_Long
-    5 -> do
+    5 ---- CONSTANT_Long
+     -> do
       val <- get
       return [Phantom, ConstantLong val]
-    ---- CONSTANT_Double
-    6 -> do
+    6 ---- CONSTANT_Double
+     -> do
       val <- getFloat64be
       return [Phantom, ConstantDouble val]
-    ---- CONSTANT_Class
-    7 -> do
+    7 ---- CONSTANT_Class
+     -> do
       index <- getWord16be
       return [ConstantClass index]
-    ---- CONSTANT_String
-    8 -> do
+    8 ---- CONSTANT_String
+     -> do
       index <- getWord16be
       return [ConstantString index]
-    ---- CONSTANT_Fieldref
-    9 -> do
+    9 ---- CONSTANT_Fieldref
+     -> do
       classIndex <- getWord16be
       nameTypeIndex <- getWord16be
       return [FieldRef classIndex nameTypeIndex]
-    ---- CONSTANT_Methodref
-    10 -> do
+    10 ---- CONSTANT_Methodref
+     -> do
       classIndex <- getWord16be
       nameTypeIndex <- getWord16be
       return [MethodRef classIndex nameTypeIndex]
-    ---- CONSTANT_InterfaceMethodref
-    11 -> do
+    11 ---- CONSTANT_InterfaceMethodref
+     -> do
       classIndex <- getWord16be
       nameTypeIndex <- getWord16be
       return [InterfaceMethodRef classIndex nameTypeIndex]
-    ---- CONSTANT_NameAndType
-    12 -> do
+    12 ---- CONSTANT_NameAndType
+     -> do
       classIndex <- getWord16be
       nameTypeIndex <- getWord16be
       return [NameAndType classIndex nameTypeIndex]
-    ---- CONSTANT_MethodHandle_info
-    15 -> do
+    15 ---- CONSTANT_MethodHandle_info
+     -> do
       referenceKind <- getWord8
       referenceIndex <- getWord16be
       return [MethodHandle referenceKind referenceIndex]
-    ---- CONSTANT_MethodType_info
-    16 -> do
+    16 ---- CONSTANT_MethodType_info
+     -> do
       descriptorIndex <- getWord16be
       return [MethodType descriptorIndex]
-    ---- CONSTANT_InvokeDynamic_info
-    18 -> do
+    18 ---- CONSTANT_InvokeDynamic_info
+     -> do
       bootstrapMethodIndex <- getWord16be
       nameTypeIndex <- getWord16be
       return [InvokeDynamic bootstrapMethodIndex nameTypeIndex]
@@ -323,7 +295,6 @@ type ConstantPoolIndex = Word16
 
 type ConstantPool = Array ConstantPoolIndex ConstantPoolInfo
 
--- Get monad that extract ConstantPool from input.
 getConstantPool :: Get ConstantPool
 getConstantPool = do
   poolCount <- getWord16be
@@ -335,20 +306,16 @@ getConstantPool = do
       info <- getConstantPoolInfo
       parseList (n - fromIntegral (length info)) (info ++ result)
 
--- | Returns string at given index in constant pool or raises error
--- | if constant pool index is not a Utf8 string.
 poolUtf8 :: ConstantPool -> ConstantPoolIndex -> String
 poolUtf8 cp i =
   case cp ! i of
     Utf8 s -> s
     v -> error $ "Index " ++ show i ++ " has value " ++ show v ++ " when string expected."
 
--- | Returns value at given index in constant pool or raises error
--- | if constant pool index is not a value.
 poolValue :: ConstantPool -> ConstantPoolIndex -> ConstantPoolValue
 poolValue cp i =
   case cp ! i of
-    ConstantClass j -> ClassRef (mkClassName (cp `poolUtf8` j))
+    ConstantClass j -> ClassRef (packClassName (cp `poolUtf8` j))
     ConstantDouble v -> Double v
     ConstantFloat v -> Float v
     ConstantInteger v -> Integer v
@@ -356,14 +323,14 @@ poolValue cp i =
     ConstantString j -> String (cp `poolUtf8` j)
     v -> error ("Index " ++ show i ++ " has unexpected value " ++ show v ++ " when a constant was expected.")
 
-poolClassType :: ConstantPool -> ConstantPoolIndex -> Type
+poolClassType :: ConstantPool -> ConstantPoolIndex -> JavaType
 poolClassType cp i =
   case cp ! i of
     ConstantClass j ->
       let typeName = poolUtf8 cp j
        in if head typeName == '['
             then fst (parseTypeDescriptor typeName)
-            else ClassType (mkClassName typeName)
+            else JavaClassType (packClassName typeName)
     _ -> error ("Index " ++ show i ++ " is not a class reference.")
 
 poolNameAndType :: ConstantPool -> ConstantPoolIndex -> (String, String)
@@ -372,33 +339,32 @@ poolNameAndType cp i =
     NameAndType nameIndex typeIndex -> (poolUtf8 cp nameIndex, poolUtf8 cp typeIndex)
     _ -> error ("Index " ++ show i ++ " is not a name and type reference.")
 
--- | Returns tuple containing field class, name, and type at given index.
-poolFieldRef :: ConstantPool -> ConstantPoolIndex -> FieldId
+poolFieldRef :: ConstantPool -> ConstantPoolIndex -> JavaFieldId
 poolFieldRef cp i =
   case cp ! i of
     FieldRef classIndex ntIndex ->
       let (name, fldDescriptor) = poolNameAndType cp ntIndex
           (fldType, []) = parseTypeDescriptor fldDescriptor
-          ClassType cName = poolClassType cp classIndex
-       in FieldId cName name fldType
+          JavaClassType cName = poolClassType cp classIndex
+       in JavaFieldId cName name fldType
     _ -> error ("Index " ++ show i ++ " is not a field reference.")
 
-poolInterfaceMethodRef :: ConstantPool -> ConstantPoolIndex -> (Type, MethodKey)
+poolInterfaceMethodRef :: ConstantPool -> ConstantPoolIndex -> (JavaType, MethodId)
 poolInterfaceMethodRef cp i =
   case cp ! i of
     InterfaceMethodRef classIndex ntIndex ->
       let (name, fieldDescriptor) = poolNameAndType cp ntIndex
           interfaceType = poolClassType cp classIndex
-       in (interfaceType, makeMethodKey name fieldDescriptor)
+       in (interfaceType, makeMethodId name fieldDescriptor)
     _ -> error ("Index " ++ show i ++ " is not an interface method reference.")
 
-poolMethodRef :: ConstantPool -> ConstantPoolIndex -> (Type, MethodKey)
+poolMethodRef :: ConstantPool -> ConstantPoolIndex -> (JavaType, MethodId)
 poolMethodRef cp i =
   case cp ! i of
     MethodRef classIndex ntIndex ->
       let (name, fieldDescriptor) = poolNameAndType cp ntIndex
           classType = poolClassType cp classIndex
-       in (classType, makeMethodKey name fieldDescriptor)
+       in (classType, makeMethodId name fieldDescriptor)
     _ -> error ("Index " ++ show i ++ " is not a method reference.")
 
 _uncurry3 :: (a -> b -> c -> d) -> (a, b, c) -> d
@@ -622,13 +588,13 @@ getInstruction cp address = do
       return $ Invokespecial classType key
     0xB8 -> do
       index <- getWord16be
-      let (ClassType cName, key) = poolMethodRef cp index
+      let (JavaClassType cName, key) = poolMethodRef cp index
        in return $ Invokestatic cName key
     0xB9 -> do
       index <- getWord16be
       _ <- getWord8
       _ <- getWord8
-      let (ClassType cName, key) = poolInterfaceMethodRef cp index
+      let (JavaClassType cName, key) = poolInterfaceMethodRef cp index
        in return $ Invokeinterface cName key
     0xBA -> do
       index <- getWord16be
@@ -638,22 +604,22 @@ getInstruction cp address = do
     0xBB -> do
       index <- getWord16be
       case (poolClassType cp index) of
-        ClassType name -> return (New name)
-        _              -> error "internal: unexpected pool class type"
+        JavaClassType name -> return (New name)
+        _                  -> error "internal: unexpected pool class type"
     0xBC -> do
       typeCode <- getWord8
-      (return . Newarray . ArrayType)
+      (return . Newarray . JavaArrayType)
         (case typeCode of
-           4  -> BooleanType
-           5  -> CharType
-           6  -> FloatType
-           7  -> DoubleType
-           8  -> ByteType
-           9  -> ShortType
-           10 -> IntType
-           11 -> LongType
+           4  -> JavaBooleanType
+           5  -> JavaCharType
+           6  -> JavaFloatType
+           7  -> JavaDoubleType
+           8  -> JavaByteType
+           9  -> JavaShortType
+           10 -> JavaIntType
+           11 -> JavaLongType
            _  -> error "internal: invalid type code encountered")
-    0xBD -> return . Newarray . ArrayType . poolClassType cp =<< get
+    0xBD -> return . Newarray . JavaArrayType . poolClassType cp =<< get
     0xBE -> return Arraylength
     0xBF -> return Athrow
     0xC0 -> return . Checkcast . poolClassType cp =<< get
@@ -727,30 +693,17 @@ splitAttributes cp names = do
 ----------------------------------------------------------------------
 -- Field declarations
 -- | A field of a class.
-data Field = Field
-    -- | Returns name of field.
+data JavaField = JavaField
   { fieldName          :: String
-    -- | Returns type of field.
-  , fieldType          :: Type
-    -- | Returns visibility of field.
+  , fieldType          :: JavaType
   , fieldVisibility    :: Visibility
-    -- | Returns true if field is static.
   , fieldIsStatic      :: Bool
-    -- | Returns true if field is final.
   , fieldIsFinal       :: Bool
-    -- | Returns true if field is volatile.
   , fieldIsVolatile    :: Bool
-    -- | Returns true if field is transient.
   , fieldIsTransient   :: Bool
-    -- | Returns initial value of field or 'Nothing' if not assigned.
-    --
-    -- Only static fields may have a constant value.
   , fieldConstantValue :: Maybe ConstantPoolValue
-    -- | Returns true if field is synthetic.
   , fieldIsSynthetic   :: Bool
-    -- | Returns true if field is deprecated.
   , fieldIsDeprecated  :: Bool
-    -- | Returns true if field is transient.
   , fieldIsEnum        :: Bool
   , fieldSignature     :: Maybe String
   , fieldAttributes    :: [Attribute]
@@ -786,7 +739,7 @@ data Field = Field
 --     ++ (if isSynthetic then " synthetic " else "")
 --     ++ (if isDeprecated then " deprecated " else "")
 --     ++ show attrs
-getField :: ConstantPool -> Get Field
+getField :: ConstantPool -> Get JavaField
 getField cp = do
   accessFlags <- getWord16be
   name <- return . poolUtf8 cp =<< getWord16be
@@ -794,35 +747,30 @@ getField cp = do
   ([constantValue, synthetic, deprecated, signature], userAttrs) <-
     splitAttributes cp ["ConstantValue", "Synthetic", "Deprecated", "Signature"]
   return $
-    Field
+    JavaField
       name
       fldType
                    -- Visibility
       (case accessFlags .&. 0x7 of
-         0x0   -> Default
-         0x1   -> Public
-         0x2   -> Private
-         0x4   -> Protected
-         flags -> error $ "Unexpected flags " ++ show flags)
-                   -- Static
-      ((accessFlags .&. 0x0008) /= 0)
-                   -- Final
-      ((accessFlags .&. 0x0010) /= 0)
-                   -- Volatile
-      ((accessFlags .&. 0x0040) /= 0)
-                   -- Transient
-      ((accessFlags .&. 0x0080) /= 0)
-                   -- Constant Value
+         0x0000 -> Default
+         0x0001 -> Public -- | ACC_PUBLIC
+         0x0002 -> Private -- | ACC_PRIVATE
+         0x0004 -> Protected -- | ACC_PROTECTED
+         flags  -> error $ "Unexpected flags " ++ show flags)
+      ((accessFlags .&. 0x0008) /= 0) -- | ACC_STATIC
+      ((accessFlags .&. 0x0010) /= 0) -- | ACC_FINAL
+      ((accessFlags .&. 0x0040) /= 0) -- | ACC_ACC_VOLATILE
+      ((accessFlags .&. 0x0080) /= 0) -- | ACC_TRANSIENT
       (case constantValue of
          [bytes] -> Just $ poolValue cp $ runGet getWord16be bytes
          []      -> Nothing
          _       -> error "internal: unexpected constant value form")
                    -- Check for synthetic bit in flags and buffer
-      ((accessFlags .&. 0x1000) /= 0 || (not (null synthetic)))
+      ((accessFlags .&. 0x1000) /= 0 || (not (null synthetic))) -- | ACC_SYNTHETIC
                    -- Deprecated flag
       (not (null deprecated))
                    -- Check for enum bit in flags
-      ((accessFlags .&. 0x4000) /= 0)
+      ((accessFlags .&. 0x4000) /= 0) -- | ACC_ENUM
                    -- Signature
       (case signature of
          [bytes] -> Just $ poolUtf8 cp $ runGet getWord16be bytes
@@ -897,7 +845,7 @@ data LocalVariableTableEntry = LocalVariableTableEntry
   { localStart  :: PC -- Start PC
   , localExtent :: PC -- length
   , localName   :: String -- Name
-  , localType   :: Type -- Type of local variable
+  , localType   :: JavaType -- Type of local variable
   , localIdx    :: LocalVariableIndex -- Index of local variable
   } deriving (Eq, Show)
 
@@ -928,13 +876,14 @@ parseLocalVariableTable cp buffers = (concat $ map (runGet $ getLocalVariableTab
 ----------------------------------------------------------------------
 -- Method body
 data MethodBody
-  = Code Word16 -- maxStack
-         Word16 -- maxLocals
-         CFG
-         [ExceptionTableEntry] -- exception table
-         LineNumberTable -- Line number table entries (empty if information not provided)
-         LocalVariableTable -- Local variable table entries (optional)
-         [Attribute] -- Code attributes
+  = Code { codeMaxStack       :: Word16
+         , codeMaxLocals      :: Word16
+         , codeControlFlow    :: ControlFlowGraph
+         , codeExceptions     :: [ExceptionTableEntry]
+         , codeLineNumbers    :: LineNumberTable
+         , codeLocalVariables :: LocalVariableTable
+         , codeAttributes     :: [Attribute]
+          }
   | AbstractMethod
   | NativeMethod
   deriving (Eq, Show)
@@ -959,22 +908,22 @@ getCode cp = do
 
 ----------------------------------------------------------------------
 -- Method definitions
-data Method = Method
-  { methodKey      :: MethodKey
-  , visibility     :: Visibility
-  , methodIsStatic :: Bool
-  , methodIsFinal  :: Bool
-  , isSynchronized :: Bool
-  , isStrictFp     :: Bool
-  , methodBody     :: MethodBody
-  , exceptions     :: Maybe [Type]
-  , isSynthetic    :: Bool
-  , isDeprecated   :: Bool
-  , attributes     :: [Attribute]
+data JavaMethod = JavaMethod
+  { methodId             :: MethodId
+  , methodVisibility     :: Visibility
+  , methodIsStatic       :: Bool
+  , methodIsFinal        :: Bool
+  , methodIsSynchronized :: Bool
+  , methodIsStrictFp     :: Bool
+  , methodIsSynthetic    :: Bool
+  , methodIsDeprecated   :: Bool
+  , methodBody           :: MethodBody
+  , methodExceptions     :: Maybe [JavaType]
+  , attributes           :: [Attribute]
   } deriving (Eq, Show)
 
-instance Ord Method where
-  compare m1 m2 = compare (methodKey m1) (methodKey m2)
+instance Ord JavaMethod where
+  compare m1 m2 = compare (methodId m1) (methodId m2)
 
 -- instance Show Method where
 --   show (Method (MethodKey name returnType parameterTypes)
@@ -1022,38 +971,39 @@ instance Ord Method where
 --                  then ""
 --                  else "\n    Attributes:   " ++ show codeAttrs
 --          _ -> ""
-getExceptions :: ConstantPool -> Get [Type]
+getExceptions :: ConstantPool -> Get [JavaType]
 getExceptions cp = do
   exceptionCount <- getWord16be
   replicateN (getWord16be >>= return . poolClassType cp) exceptionCount
 
-getMethod :: ConstantPool -> Get Method
+getMethod :: ConstantPool -> Get JavaMethod
 getMethod cp = do
   accessFlags <- getWord16be
   name <- getWord16be >>= return . (poolUtf8 cp)
   (returnType, parameterTypes) <- getWord16be >>= return . parseMethodDescriptor . (poolUtf8 cp)
   ([codeVal, exceptionsVal, syntheticVal, deprecatedVal], userAttrs) <-
     splitAttributes cp ["Code", "Exceptions", "Synthetic", "Deprecated"]
-  let isStatic' = (accessFlags .&. 0x008) /= 0
-      isFinal = (accessFlags .&. 0x010) /= 0
-      isSynchronized' = (accessFlags .&. 0x020) /= 0
-      isAbstract = (accessFlags .&. 0x400) /= 0
-      isStrictFp' = (accessFlags .&. 0x800) /= 0
+  let isStatic' = (accessFlags .&. 0x0008) /= 0 -- | ACC_STATIC
+      isFinal = (accessFlags .&. 0x0010) /= 0 -- | ACC_FINAL
+      isSynchronized' = (accessFlags .&. 0x0020) /= 0 -- | ACC_SYNCHRONIZED
+      isAbstract = (accessFlags .&. 0x0400) /= 0 -- | ACC_ABSTRACT
+      isStrictFp' = (accessFlags .&. 0x0800) /= 0 -- | ACC_STRICT
    in return $
-      Method
-        (MethodKey name parameterTypes returnType)
-                 -- Visibility
+      JavaMethod
+        (MethodId name parameterTypes returnType)
         (case accessFlags .&. 0x7 of
-           0x0   -> Default
-           0x1   -> Public
-           0x2   -> Private
-           0x4   -> Protected
-           flags -> error $ "Unexpected flags " ++ show flags)
+           0x0000 -> Default
+           0x0001 -> Public -- | ACC_PUBLIC
+           0x0002 -> Private -- | ACC_PRIVATE
+           0x0004 -> Protected -- | ACC_PROTECTED
+           flags  -> error $ "Unexpected flags " ++ show flags)
         isStatic'
         isFinal
         isSynchronized'
         isStrictFp'
-        (if ((accessFlags .&. 0x100) /= 0)
+        (not $ null syntheticVal)
+        (not $ null deprecatedVal)
+        (if ((accessFlags .&. 0x0100) /= 0) -- | ACC_NATIVE
            then NativeMethod
            else if isAbstract
                   then AbstractMethod
@@ -1064,35 +1014,33 @@ getMethod cp = do
            [bytes] -> Just (runGet (getExceptions cp) bytes)
            []      -> Nothing
            _       -> error "internal: unexpected expectionsVal form")
-        (not $ null syntheticVal)
-        (not $ null deprecatedVal)
         userAttrs
 
-methodIsNative :: Method -> Bool
+methodIsNative :: JavaMethod -> Bool
 methodIsNative m =
   case methodBody m of
     NativeMethod -> True
     _            -> False
 
 -- | Returns true if method is abstract.
-methodIsAbstract :: Method -> Bool
+methodIsAbstract :: JavaMethod -> Bool
 methodIsAbstract m =
   case methodBody m of
     AbstractMethod -> True
     _              -> False
 
 -- | Returns the name of a method.
-methodName :: Method -> String
-methodName = methodKeyName . methodKey
+methodName :: JavaMethod -> String
+methodName = methodIdName . methodId
 
 -- | Returns parameter types for method.
-methodParameterTypes :: Method -> [Type]
-methodParameterTypes = methodKeyParameterTypes . methodKey
+methodParameterTypes :: JavaMethod -> [JavaType]
+methodParameterTypes = methodIdParameterTypes . methodId
 
 -- | Returns a list containing the local variable index that each
 -- parameter is stored in when the method is invoked. Non-static
 -- methods reserve index 0 for the @self@ parameter.
-methodParameterIndexes :: Method -> [LocalVariableIndex]
+methodParameterIndexes :: JavaMethod -> [LocalVariableIndex]
 methodParameterIndexes m = init $ scanl next start params
   where
     params = methodParameterTypes m
@@ -1100,23 +1048,23 @@ methodParameterIndexes m = init $ scanl next start params
       if methodIsStatic m
         then 0
         else 1
-    next n DoubleType = n + 2
-    next n LongType   = n + 2
-    next n _          = n + 1
+    next n JavaDoubleType = n + 2
+    next n JavaLongType   = n + 2
+    next n _              = n + 1
 
 -- | Returns the local variable index that the parameter is stored in when
 -- the method is invoked.
-localIndexOfParameter :: Method -> Int -> LocalVariableIndex
+localIndexOfParameter :: JavaMethod -> Int -> LocalVariableIndex
 localIndexOfParameter m i = assert (0 <= i && i < length offsets) $ offsets !! i
   where
     offsets = methodParameterIndexes m
 
 -- | Return type of the method, or 'Nothing' for a void return type.
-methodReturnType :: Method -> Maybe Type
-methodReturnType = methodKeyReturnType . methodKey
+methodReturnType :: JavaMethod -> Maybe JavaType
+methodReturnType = methodIdReturnType . methodId
 
 -- (lookupInstruction method pc) returns instruction at pc in method.
-lookupInstruction :: Method -> PC -> Instruction
+lookupInstruction :: JavaMethod -> PC -> Instruction
 lookupInstruction method pc =
   case methodBody method of
     Code _ _ cfg _ _ _ _ ->
@@ -1126,44 +1074,44 @@ lookupInstruction method pc =
     _ -> error ("Method " ++ show method ++ " has no body")
 
 -- Returns pc of next instruction.
-nextPc :: Method -> PC -> PC
+nextPc :: JavaMethod -> PC -> PC
 nextPc method pc =
   case methodBody method of
     Code _ _ cfg _ _ _ _ ->
       case nextPC cfg pc of
-        Nothing  -> error "JavaParser.nextPc: no next instruction"
+        Nothing  -> error "internal: nextPc: no next instruction"
         Just npc -> npc
     _ -> error "internal: unexpected method body form"
 
 --    trace ("nextPC: method = " ++ show method) $
 --        nextPcPrim (toInstStream cfg) pc
 -- | Returns maximum number of local variables in method.
-methodMaxLocals :: Method -> LocalVariableIndex
+methodMaxLocals :: JavaMethod -> LocalVariableIndex
 methodMaxLocals method =
   case methodBody method of
     Code _ c _ _ _ _ _ -> c
     _                  -> error "internal: unexpected method body form"
 
 -- | Returns true if method has debug informaiton available.
-hasDebugInfo :: Method -> Bool
+hasDebugInfo :: JavaMethod -> Bool
 hasDebugInfo method =
   case methodBody method of
     Code _ _ _ _ lns lvars _ -> not (Map.null (pcLineMap lns) && null lvars)
     _                        -> False
 
-methodLineNumberTable :: Method -> Maybe LineNumberTable
+methodLineNumberTable :: JavaMethod -> Maybe LineNumberTable
 methodLineNumberTable me = do
   case methodBody me of
     Code _ _ _ _ lns _ _ -> Just lns
     _                    -> Nothing
 
-sourceLineNumberInfo :: Method -> [(Word16, PC)]
+sourceLineNumberInfo :: JavaMethod -> [(Word16, PC)]
 sourceLineNumberInfo me = maybe [] (Map.toList . pcLineMap) $ methodLineNumberTable me
 
 -- | Returns source line number of an instruction in a method at a given PC,
 -- or the line number of the nearest predecessor instruction, or 'Nothing' if
 -- neither is available.
-sourceLineNumberOrPrev :: Method -> PC -> Maybe Word16
+sourceLineNumberOrPrev :: JavaMethod -> PC -> Maybe Word16
 sourceLineNumberOrPrev me pc =
   case methodBody me of
     Code _ _ _ _ lns _ _ ->
@@ -1175,13 +1123,13 @@ sourceLineNumberOrPrev me pc =
     _ -> error "internal: unexpected method body form"
 
 -- | Returns the starting PC for the source at the given line number.
-lookupLineStartPC :: Method -> Word16 -> Maybe PC
+lookupLineStartPC :: JavaMethod -> Word16 -> Maybe PC
 lookupLineStartPC me ln = do
   m <- methodLineNumberTable me
   Map.lookup ln (linePCMap m)
 
 -- | Returns the enclosing method and starting PC for the source at the given line number.
-lookupLineMethodStartPC :: Class -> Word16 -> Maybe (Method, PC)
+lookupLineMethodStartPC :: JavaClass -> Word16 -> Maybe (JavaMethod, PC)
 lookupLineMethodStartPC cl ln =
   case results of
     (p:_) -> return p
@@ -1193,7 +1141,7 @@ lookupLineMethodStartPC cl ln =
         Just pc -> return (me, pc)
         Nothing -> mzero
 
-localVariableEntries :: Method -> PC -> [LocalVariableTableEntry]
+localVariableEntries :: JavaMethod -> PC -> [LocalVariableTableEntry]
 localVariableEntries method pc =
   case methodBody method of
     Code _ _ _ _ _ lvars _ ->
@@ -1203,16 +1151,16 @@ localVariableEntries method pc =
 
 -- | Returns local variable entry at given PC and local variable index or
 -- 'Nothing' if no mapping is found.
-lookupLocalVariableByIdx :: Method -> PC -> LocalVariableIndex -> Maybe LocalVariableTableEntry
+lookupLocalVariableByIdx :: JavaMethod -> PC -> LocalVariableIndex -> Maybe LocalVariableTableEntry
 lookupLocalVariableByIdx method pc i = find (\e -> localIdx e == i) (localVariableEntries method pc)
 
 -- | Returns local variable entry at given PC and local variable string or
 -- 'Nothing' if no mapping is found.
-lookupLocalVariableByName :: Method -> PC -> String -> Maybe LocalVariableTableEntry
+lookupLocalVariableByName :: JavaMethod -> PC -> String -> Maybe LocalVariableTableEntry
 lookupLocalVariableByName method pc name = find (\e -> localName e == name) (localVariableEntries method pc)
 
 -- | Exception table entries for method.
-methodExceptionTable :: Method -> [ExceptionTableEntry]
+methodExceptionTable :: JavaMethod -> [ExceptionTableEntry]
 methodExceptionTable method =
   case methodBody method of
     Code _ _ _ table _ _ _ -> table
@@ -1220,45 +1168,31 @@ methodExceptionTable method =
 
 ----------------------------------------------------------------------
 -- Class declarations
--- | A JVM class or interface.
-data Class = MkClass
+-- | A Java class or interface.
+data JavaClass = JavaClass
   { majorVersion           :: Word16
   , minorVersion           :: Word16
   , constantPool           :: ConstantPool
-  -- | Returns true if the class is public.
   , classIsPublic          :: Bool
-  -- | Returns true if the class is final.
   , classIsFinal           :: Bool
-  -- | Returns true if the class was annotated with the @super@ attribute.
   , classHasSuperAttribute :: Bool
-  -- | Returns true if the class is an interface.
   , classIsInterface       :: Bool
-  -- | Returns true if the class is abstract.
   , classIsAbstract        :: Bool
-  -- | Returns the name of the class.
-  , className              :: ClassName
-  -- | Returns the name of the superclass of this class or 'Nothing'
-  -- if this class has no superclass.
-  , superClass             :: Maybe ClassName
-  -- | Returns the list of interfaces this class implements.
-  , classInterfaces        :: [ClassName]
-  -- | Returns the list of fields of the class.
-  , classFields            :: [Field]
-  -- Maps method keys to method.
-  , classMethodMap         :: Map MethodKey Method
-  -- | Returns the name of the source file where the class was
-  -- defined.
+  , className              :: JavaClassName
+  , superClass             :: Maybe JavaClassName
+  , classInterfaces        :: [JavaClassName]
+  , classFields            :: [JavaField]
+  , classMethodMap         :: Map MethodId JavaMethod
   , classSourceFile        :: Maybe String
-  -- | Returns the list of user-defined attributes of the class.
   , classAttributes        :: [Attribute]
   } deriving (Show)
 
 -- | Returns methods in class.
-classMethods :: Class -> [Method]
+classMethods :: JavaClass -> [JavaMethod]
 classMethods = Map.elems . classMethodMap
 
-showClass :: Class -> String
-showClass cl =
+prettyClass :: JavaClass -> String
+prettyClass cl =
   "Major Version: " ++
   show (majorVersion cl) ++
   "\n" ++
@@ -1302,7 +1236,7 @@ showClass cl =
   show (classSourceFile cl) ++ "\n" ++ "Attributes:\n" ++ showOnNewLines 2 (map show $ classAttributes cl)
 
 -- | Binary parser for classes.
-getClass :: Get Class
+getClass :: Get JavaClass
 getClass = do
   magic <- getWord32be
   (if magic /= 0xCAFEBABE
@@ -1319,24 +1253,24 @@ getClass = do
   methods <- getWord16be >>= replicateN (getMethod cp)
   ([sourceFile], userAttrs) <- splitAttributes cp ["SourceFile"]
   return $
-    MkClass
+    JavaClass
       majorVersion'
       minorVersion'
       cp
-      ((accessFlags .&. 0x001) /= 0)
-      ((accessFlags .&. 0x010) /= 0)
-      ((accessFlags .&. 0x020) /= 0)
-      ((accessFlags .&. 0x200) /= 0)
-      ((accessFlags .&. 0x400) /= 0)
+      ((accessFlags .&. 0x0001) /= 0) -- | ACC_PUBLIC
+      ((accessFlags .&. 0x0010) /= 0) -- | ACC_FINAL
+      ((accessFlags .&. 0x0020) /= 0) -- | ACC_SUPER
+      ((accessFlags .&. 0x0200) /= 0) -- | ACC_INTERFACE
+      ((accessFlags .&. 0x0400) /= 0) -- | ACC_ABSTRACT
       thisClass
       (if superClassIndex == 0
          then Nothing
          else case poolClassType cp superClassIndex of
-                ClassType name -> (Just name)
+                JavaClassType name -> (Just name)
                 classType -> error ("Unexpected class type " ++ show classType))
       interfaces
       fields
-      (Map.fromList (map (\m -> (methodKey m, m)) methods))
+      (Map.fromList (map (\m -> (methodId m, m)) methods))
                      -- Source file
       (case sourceFile of
          [bytes] -> Just $ poolUtf8 cp $ runGet getWord16be bytes
@@ -1347,25 +1281,25 @@ getClass = do
     getReferenceName cp = do
       index <- getWord16be
       case poolClassType cp index of
-        ClassType name -> return name
-        tp             -> error ("Unexpected class type " ++ show tp)
+        JavaClassType name -> return name
+        tp                 -> error ("Unexpected class type " ++ show tp)
 
 -- | Returns method with given key in class or 'Nothing' if no method with that
 -- key is found.
-lookupMethod :: Class -> MethodKey -> Maybe Method
+lookupMethod :: JavaClass -> MethodId -> Maybe JavaMethod
 lookupMethod javaClass key = Map.lookup key (classMethodMap javaClass)
 
 -- | Load and parse the class at the given path.
-loadClass :: FilePath -> IO Class
+loadClass :: FilePath -> IO JavaClass
 loadClass path = do
   handle <- openBinaryFile path ReadMode
   contents <- L.hGetContents handle
   let result = runGet getClass contents
    in result `seq` (hClose handle >> return result)
 
-getElemTy :: Type -> Type
-getElemTy (ArrayType t) = aux t
+getElemType :: JavaType -> JavaType
+getElemType (JavaArrayType t) = aux t
   where
-    aux (ArrayType t') = aux t'
-    aux t'             = t'
-getElemTy _ = error "getArrElemTy given non-array type"
+    aux (JavaArrayType t') = aux t'
+    aux t'                 = t'
+getElemType _ = error "getArrElemType given non-array type"
