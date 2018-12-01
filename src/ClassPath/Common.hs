@@ -77,11 +77,11 @@ newtype JavaClassName =
   deriving (Eq, Ord, Show)
 
 instance IsString JavaClassName where
-  fromString s = JavaClassName s
+  fromString = JavaClassName
 
 -- | Make a class name from a string with packages separated by slashes.
 packClassName :: String -> JavaClassName
-packClassName s = JavaClassName s
+packClassName = JavaClassName
 
 -- | Print class name with names of packages separated by slashes.
 unpackClassName :: JavaClassName -> String
@@ -213,7 +213,7 @@ type PC = Word16
 data Instruction
   = Aaload -- | Load reference from array
   | Aastore -- | Store into reference array
-  | Aconst_null -- | Push null
+  | AconstNull -- | Push null
   | Aload LocalVariableIndex -- | Load reference from local variable
   | Areturn -- | Return reference from method
   | Arraylength -- | Get length of array
@@ -449,8 +449,8 @@ nextPcPrim :: InstructionStream -> PC -> PC
 nextPcPrim stream pc = findNext stream (pc + 1)
   where
     findNext is i =
-      case (is ! i) of
-        Just _  -> i
+      case is ! i of
+        Just _ -> i
         Nothing -> findNext is (i + 1)
 
 safeNextPcPrim :: InstructionStream -> PC -> Maybe PC
@@ -470,7 +470,7 @@ instance Show JavaType where
   show (JavaClassType cn) = slashesToDots (unpackClassName cn)
   show JavaShortType      = "short"
   show JavaBooleanType    = "boolean"
-  show (JavaArrayType tp) = (show tp) ++ "[]"
+  show (JavaArrayType tp) = show tp ++ "[]"
 
 prettyJavaType :: JavaType -> Doc
 prettyJavaType = text . show

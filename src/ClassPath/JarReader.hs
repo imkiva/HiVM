@@ -37,10 +37,10 @@ newtype JarReader = JR
 -- | Print all the directory entries known to this JarReader
 --   onto the console
 dumpJarReader :: JarReader -> IO ()
-dumpJarReader jr = mapM_ putStrLn (map unpack . M.keys $ unJR jr)
+dumpJarReader jr = mapM_ (putStrLn . unpack) (M.keys (unJR jr))
 
 emptyJarReader :: JarReader
-emptyJarReader = JR (M.empty)
+emptyJarReader = JR M.empty
 
 -- | List all of the classes contained in the 'JarReader'
 jarClasses :: JarReader -> [JavaClassName]
@@ -110,13 +110,13 @@ addJar jr fn = do
     M.fromList .
     map ((dentFilename &&& (,) fn) . checkBitFlagAndSizes) . filter (isSuffixOf (pack ".class") . dentFilename) <$>
     let numHdrs = fromIntegral (dendEntryCnt dend)
-     in do parseBytes (dendDirSize dend) (replicateM numHdrs dirEnt)
+     in parseBytes (dendDirSize dend) (replicateM numHdrs dirEnt)
 
 -- | NB: We expect that the given class files do not have the (un)compressed
 -- sizes stored in the data descriptor segment.
 checkBitFlagAndSizes :: DirEntry -> DirEntry
 checkBitFlagAndSizes d =
-  if (dentBitFlag d .&. 0x8 == 0 || (dentCompSz d > 0 && dentUncompSz d > 0))
+  if dentBitFlag d .&. 8 == 0 || (dentCompSz d > 0 && dentUncompSz d > 0)
     then d
     else ddSizesNotSupported
 
@@ -192,7 +192,7 @@ lclHdrSig :: Word32
 lclHdrSig = 0x04034b50
 
 compTypeNotSupported :: a
-compTypeNotSupported = error $ "JAR processing error: data descriptor sizes encoding unsupported"
+compTypeNotSupported = error "JAR processing error: data descriptor sizes encoding unsupported"
 
 ddSizesNotSupported :: a
-ddSizesNotSupported = error $ "JAR processing error: data descriptor sizes encoding unsupported"
+ddSizesNotSupported = error "JAR processing error: data descriptor sizes encoding unsupported"

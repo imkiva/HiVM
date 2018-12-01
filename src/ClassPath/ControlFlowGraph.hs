@@ -1,6 +1,7 @@
-{-# LANGUAGE BangPatterns               #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE BangPatterns      #-}
+{-# LANGUAGE LambdaCase        #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections     #-}
 
 module ClassPath.ControlFlowGraph
     -- * Basic blocks
@@ -83,11 +84,10 @@ buildCFG extbl istrm = cfg
                        [] -> Nothing
                        _ -> error $ "bbByPC: internal: " ++ "multiple interval match"
         , bbById =
-            \bbid ->
-              case bbid of
-                BBId pc   -> bbByPC cfg pc
-                BBIdEntry -> Just entryBlock
-                BBIdExit  -> Just exitBlock
+            \case
+              BBId pc -> bbByPC cfg pc
+              BBIdEntry -> Just entryBlock
+              BBIdExit -> Just exitBlock
         , nextPC =
             \pc ->
               case bbByPC cfg pc of
@@ -113,15 +113,15 @@ buildCFG extbl istrm = cfg
                 -- Identify a flow edge from bb to x when x's leader is a branch
                 -- target of bb's terminator
                    =
-                    (map
-                       (\bt ->
-                          case bbByPC cfg bt of
-                            Nothing -> error "newSuccs: internal: invalid BBId"
-                            Just sbb -> (bbId bb, bbId sbb))
-                       (brTargets $ terminatorPC bb)) ++
-                -- Identify a flow edge from bb to x when bb's terminator
-                -- doesn't break the control flow path x's leader is the
-                -- instruction successor of bb's terminator.
+                    map
+                      (\bt ->
+                         case bbByPC cfg bt of
+                           Nothing -> error "newSuccs: internal: invalid BBId"
+                           Just sbb -> (bbId bb, bbId sbb))
+                      (brTargets $ terminatorPC bb) ++
+                    -- Identify a flow edge from bb to x when bb's terminator
+                    -- doesn't break the control flow path x's leader is the
+                    -- instruction successor of bb's terminator.
                     case do let tpc = terminatorPC bb
                             breaksCFP <- breaksControlFlow `fmap` bbInstByPC bb tpc
                             if breaksCFP
@@ -174,7 +174,7 @@ buildCFG extbl istrm = cfg
     isBrInst pc = not . null $ brTargets pc
     isBrTarget pc = pc `elem` concat (M.elems btm)
     btm = mkBrTargetMap extbl istrm
-    brTargets pc = maybe [] id $ M.lookup pc btm
+    brTargets pc = fromMaybe [] $ M.lookup pc btm
 
 --  let dot = cfgToDot extbl cfg "???" in
 --  trace ("dot:\n" ++ dot) $
@@ -191,7 +191,7 @@ buildGraph cfg = (mkGraph ns es, nm)
 -- | @isImmediatePostDominator g x y@ returns @True@ if @y@
 --   immediately post-dominates @x@ in control-flow graph @g@.
 isImmediatePostDominator :: ControlFlowGraph -> BBId -> BBId -> Bool
-isImmediatePostDominator cfg bb bb' = maybe False (== bb') . M.lookup bb . ipdoms $ cfg
+isImmediatePostDominator cfg bb bb' = (== Just bb') . M.lookup bb . ipdoms $ cfg
 
 -- | Calculate the post-dominators of a given basic block.
 getPostDominators :: ControlFlowGraph -> BBId -> [BBId]
@@ -327,7 +327,7 @@ mkBrTargetMap extbl istrm = foldr f M.empty istrm'
         Jsr pc -> Just [pc]
         Ret {} ->
           let xfer = retTargetXfer extbl istrm
-           in case doFlow xfer M.empty [(Just $ firstPC, [])] [] of
+           in case doFlow xfer M.empty [(Just firstPC, [])] [] of
                 [] -> error "Internal: dataflow analysis yielded no targets for ret"
                 bs -> Just $ map snd bs
         Lookupswitch dflt tgts -> Just $ dflt : map snd tgts
@@ -347,9 +347,9 @@ doFlow ::
   -> acc -- | accumulated dataflow result
   -> acc
 doFlow _ _ [] acc = acc
-doFlow xfer seen !(curr:rem) !acc =
+doFlow xfer seen (curr:rem) !acc =
   let (acc', new') = filter (`M.notMember` seen) `second` xfer acc curr
-   in doFlow xfer (foldr (flip M.insert ()) seen new') (rem ++ new') acc'
+   in doFlow xfer (foldr (`M.insert` ()) seen new') (rem ++ new') acc'
 
 --    trace ("doFlow step: worklist is: " ++ show (rem ++ new)) $
 -- We represent the dataflow state before execution of an instruction at PC 'p'
@@ -362,8 +362,8 @@ retTargetXfer _ _ acc (Nothing, _) = (acc, [])
 retTargetXfer extbl istrm acc (Just pc, localr) = xfer (lkup pc)
   where
     succPC = safeNextPcPrim istrm
-    ssuccPC = maybe (error $ "btx: invalid succPC") id . succPC
-    lkup p = maybe (error $ "btx: Invalid inst @ " ++ show p) id (istrm ! p)
+    ssuccPC = fromMaybe (error "btx: invalid succPC") . succPC
+    lkup p = fromMaybe (error $ "btx: Invalid inst @ " ++ show p) (istrm ! p)
     --
     xfer (Jsr label) =
       case lkup label
@@ -392,7 +392,7 @@ retTargetXfer extbl istrm acc (Just pc, localr) = xfer (lkup pc)
        =
         ( acc
         , let getHndlrPC (ExceptionTableEntry _ _ h _) = h
-              ts = map (flip (,) localr . Just . getHndlrPC) . filter (ehCoversPC pc) $ extbl
+              ts = map ((, localr) . Just . getHndlrPC) . filter (ehCoversPC pc) $ extbl
            in if breaksControlFlow inst
                 then ts -- terminate this cfp, but still evaluate exception cfps
                 else (succPC pc, localr) : ts -- next inst + exception cfps
@@ -500,7 +500,7 @@ cfgToDot extbl cfg methodName =
         p pc = bbId bb /= BBIdEntry && bbId bb /= BBIdExit && leaderPC bb == pc
     exhLabels =
       nub $
-      (`concatMap` (allBBs cfg)) $ \bb ->
+      (`concatMap` allBBs cfg) $ \bb ->
         case ehsForBB extbl bb of
           [] -> []
           ehs ->

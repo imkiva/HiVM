@@ -17,13 +17,13 @@ getInst = CP.codeControlFlow . CP.methodBody
 prettyMainMethod :: CP.JavaClass -> String
 prettyMainMethod cl =
   case method of
-    Just m  -> prefix ++ (methodId m) ++ "\n" ++ (prettyCode m) ++ suffix
+    Just m  -> prefix ++ methodId m ++ "\n" ++ prettyCode m ++ suffix
     Nothing -> ""
   where
     method = CP.lookupMethod cl (CP.makeMethodId "main" "([Ljava/lang/String;)V")
     className = (CP.unpackClassName . CP.className) cl
     methodId m = show $ CP.methodId m
-    prettyCode m = (CFG.prettyControlFlowGraph $ getInst m)
+    prettyCode m = CFG.prettyControlFlowGraph $ getInst m
     prefix = "In class " ++ className ++ ": "
     suffix = "\n\n"
 
@@ -35,7 +35,7 @@ testFiles = do
     isClass = (".class" ==) . takeExtension
 
 load :: [FilePath] -> [IO String]
-load = map ((liftM prettyMainMethod) . (CP.loadClassFromFile))
+load = map (fmap prettyMainMethod . CP.loadClassFromFile)
 
 main :: IO ()
 main = do

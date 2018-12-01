@@ -88,6 +88,7 @@ import           Data.Int
 import           Data.List
 import           Data.Map                   (Map)
 import qualified Data.Map                   as Map
+import           Data.Maybe
 import           Prelude                    hiding (read)
 import           System.IO
 
@@ -96,7 +97,7 @@ import           ClassPath.ControlFlowGraph
 
 -- Version of replicate with arguments convoluted for parser.
 replicateN :: (Integral b, Monad m) => m a -> b -> m [a]
-replicateN fn i = sequence (replicate (fromIntegral i) fn)
+replicateN fn i = replicateM (fromIntegral i) fn
 
 ----------------------------------------------------------------------
 -- Type
@@ -213,7 +214,7 @@ getJavaString (x:y:rest)
 getJavaString (x:y:z:rest)
   | (x .&. 0xF0) == 0xE0 && ((y .&. 0xC0) == 0x80) && ((z .&. 0xC0) == 0x80) = chr i : getJavaString rest
   where
-    i = ((fromIntegral x .&. 0x0F) `shift` 12 + (fromIntegral y .&. 0x3F) `shift` 6 + (fromIntegral z .&. 0x3F))
+    i = (fromIntegral x .&. 15) `shift` 12 + (fromIntegral y .&. 63) `shift` 6 + (fromIntegral z .&. 63)
 getJavaString _ = error "internal: unable to parse byte array for Java string"
 
 getConstantPoolInfo :: Get [ConstantPoolInfo]
@@ -372,7 +373,7 @@ getInstruction cp address = do
   op <- getWord8
   case op of
     0x00 -> return Nop
-    0x01 -> return Aconst_null
+    0x01 -> return AconstNull
     0x02 -> return $ Ldc $ Integer (-1)
     0x03 -> return $ Ldc $ Integer 0
     0x04 -> return $ Ldc $ Integer 1
@@ -387,16 +388,16 @@ getInstruction cp address = do
     0x0D -> return $ Ldc $ Float 2.0
     0x0E -> return $ Ldc $ Double 0.0
     0x0F -> return $ Ldc $ Double 1.0
-    0x10 -> liftM (Ldc . Integer . fromIntegral) (get :: Get Int8)
-    0x11 -> liftM (Ldc . Integer . fromIntegral) (get :: Get Int16)
-    0x12 -> liftM (Ldc . poolValue cp . fromIntegral) getWord8
-    0x13 -> liftM (Ldc . poolValue cp) getWord16be
-    0x14 -> liftM (Ldc . poolValue cp) getWord16be
-    0x15 -> liftM (Iload . fromIntegral) getWord8
-    0x16 -> liftM (Lload . fromIntegral) getWord8
-    0x17 -> liftM (Fload . fromIntegral) getWord8
-    0x18 -> liftM (Dload . fromIntegral) getWord8
-    0x19 -> liftM (Aload . fromIntegral) getWord8
+    0x10 -> Ldc . Integer . fromIntegral <$> (get :: Get Int8)
+    0x11 -> Ldc . Integer . fromIntegral <$> (get :: Get Int16)
+    0x12 -> Ldc . poolValue cp . fromIntegral <$> getWord8
+    0x13 -> Ldc . poolValue cp <$> getWord16be
+    0x14 -> Ldc . poolValue cp <$> getWord16be
+    0x15 -> Iload . fromIntegral <$> getWord8
+    0x16 -> Lload . fromIntegral <$> getWord8
+    0x17 -> Fload . fromIntegral <$> getWord8
+    0x18 -> Dload . fromIntegral <$> getWord8
+    0x19 -> Aload . fromIntegral <$> getWord8
     0x1A -> return (Iload 0)
     0x1B -> return (Iload 1)
     0x1C -> return (Iload 2)
@@ -425,11 +426,11 @@ getInstruction cp address = do
     0x33 -> return Baload
     0x34 -> return Caload
     0x35 -> return Saload
-    0x36 -> liftM (Istore . fromIntegral) getWord8
-    0x37 -> liftM (Lstore . fromIntegral) getWord8
-    0x38 -> liftM (Fstore . fromIntegral) getWord8
-    0x39 -> liftM (Dstore . fromIntegral) getWord8
-    0x3A -> liftM (Astore . fromIntegral) getWord8
+    0x36 -> Istore . fromIntegral <$> getWord8
+    0x37 -> Lstore . fromIntegral <$> getWord8
+    0x38 -> Fstore . fromIntegral <$> getWord8
+    0x39 -> Dstore . fromIntegral <$> getWord8
+    0x3A -> Astore . fromIntegral <$> getWord8
     0x3B -> return (Istore 0)
     0x3C -> return (Istore 1)
     0x3D -> return (Istore 2)
@@ -527,30 +528,30 @@ getInstruction cp address = do
     0x96 -> return Fcmpg
     0x97 -> return Dcmpl
     0x98 -> return Dcmpg
-    0x99 -> return . Ifeq . (address +) . fromIntegral =<< (get :: Get Int16)
-    0x9A -> return . Ifne . (address +) . fromIntegral =<< (get :: Get Int16)
-    0x9B -> return . Iflt . (address +) . fromIntegral =<< (get :: Get Int16)
-    0x9C -> return . Ifge . (address +) . fromIntegral =<< (get :: Get Int16)
-    0x9D -> return . Ifgt . (address +) . fromIntegral =<< (get :: Get Int16)
-    0x9E -> return . Ifle . (address +) . fromIntegral =<< (get :: Get Int16)
-    0x9F -> return . If_icmpeq . (address +) . fromIntegral =<< (get :: Get Int16)
-    0xA0 -> return . If_icmpne . (address +) . fromIntegral =<< (get :: Get Int16)
-    0xA1 -> return . If_icmplt . (address +) . fromIntegral =<< (get :: Get Int16)
-    0xA2 -> return . If_icmpge . (address +) . fromIntegral =<< (get :: Get Int16)
-    0xA3 -> return . If_icmpgt . (address +) . fromIntegral =<< (get :: Get Int16)
-    0xA4 -> return . If_icmple . (address +) . fromIntegral =<< (get :: Get Int16)
-    0xA5 -> return . If_acmpeq . (address +) . fromIntegral =<< (get :: Get Int16)
-    0xA6 -> return . If_acmpne . (address +) . fromIntegral =<< (get :: Get Int16)
-    0xA7 -> return . Goto . (address +) . fromIntegral =<< (get :: Get Int16)
-    0xA8 -> return . Jsr . (address +) . fromIntegral =<< (get :: Get Int16)
-    0xA9 -> liftM (Ret . fromIntegral) getWord8
+    0x99 -> Ifeq . (address +) . fromIntegral <$> (get :: Get Int16)
+    0x9A -> Ifne . (address +) . fromIntegral <$> (get :: Get Int16)
+    0x9B -> Iflt . (address +) . fromIntegral <$> (get :: Get Int16)
+    0x9C -> Ifge . (address +) . fromIntegral <$> (get :: Get Int16)
+    0x9D -> Ifgt . (address +) . fromIntegral <$> (get :: Get Int16)
+    0x9E -> Ifle . (address +) . fromIntegral <$> (get :: Get Int16)
+    0x9F -> If_icmpeq . (address +) . fromIntegral <$> (get :: Get Int16)
+    0xA0 -> If_icmpne . (address +) . fromIntegral <$> (get :: Get Int16)
+    0xA1 -> If_icmplt . (address +) . fromIntegral <$> (get :: Get Int16)
+    0xA2 -> If_icmpge . (address +) . fromIntegral <$> (get :: Get Int16)
+    0xA3 -> If_icmpgt . (address +) . fromIntegral <$> (get :: Get Int16)
+    0xA4 -> If_icmple . (address +) . fromIntegral <$> (get :: Get Int16)
+    0xA5 -> If_acmpeq . (address +) . fromIntegral <$> (get :: Get Int16)
+    0xA6 -> If_acmpne . (address +) . fromIntegral <$> (get :: Get Int16)
+    0xA7 -> Goto . (address +) . fromIntegral <$> (get :: Get Int16)
+    0xA8 -> Jsr . (address +) . fromIntegral <$> (get :: Get Int16)
+    0xA9 -> Ret . fromIntegral <$> getWord8
     0xAA -> do
       read <- bytesRead
       skip $ fromIntegral $ (4 - read `mod` 4) `mod` 4
-      defaultBranch <- return . (address +) . fromIntegral =<< (get :: Get Int32)
+      defaultBranch <- (address +) . fromIntegral <$> (get :: Get Int32)
       low <- get :: Get Int32
       high <- get :: Get Int32
-      offsets <- replicateN (return . (address +) . fromIntegral =<< (get :: Get Int32)) (high - low + 1)
+      offsets <- replicateN ((address +) . fromIntegral <$> (get :: Get Int32)) (high - low + 1)
       return $ Tableswitch defaultBranch low high offsets
     0xAB -> do
       read <- bytesRead
@@ -569,10 +570,10 @@ getInstruction cp address = do
     0xAF -> return Dreturn
     0xB0 -> return Areturn
     0xB1 -> return Return
-    0xB2 -> return . Getstatic . poolFieldRef cp =<< getWord16be
-    0xB3 -> return . Putstatic . poolFieldRef cp =<< getWord16be
-    0xB4 -> return . Getfield . poolFieldRef cp =<< getWord16be
-    0xB5 -> return . Putfield . poolFieldRef cp =<< getWord16be
+    0xB2 -> Getstatic . poolFieldRef cp <$> getWord16be
+    0xB3 -> Putstatic . poolFieldRef cp <$> getWord16be
+    0xB4 -> Getfield . poolFieldRef cp <$> getWord16be
+    0xB5 -> Putfield . poolFieldRef cp <$> getWord16be
     0xB6 -> do
       index <- getWord16be
       let (classType, key) = poolMethodRef cp index
@@ -587,18 +588,16 @@ getInstruction cp address = do
        in return $ Invokestatic cName key
     0xB9 -> do
       index <- getWord16be
-      _ <- getWord8
-      _ <- getWord8
+      [_, _] <- replicateM 2 getWord8
       let (JavaClassType cName, key) = poolInterfaceMethodRef cp index
        in return $ Invokeinterface cName key
     0xBA -> do
       index <- getWord16be
-      _ <- getWord8
-      _ <- getWord8
+      [_, _] <- replicateM 2 getWord8
       return $ Invokedynamic index
     0xBB -> do
       index <- getWord16be
-      case (poolClassType cp index) of
+      case poolClassType cp index of
         JavaClassType name -> return (New name)
         _                  -> error "internal: unexpected pool class type"
     0xBC -> do
@@ -614,43 +613,42 @@ getInstruction cp address = do
            10 -> JavaIntType
            11 -> JavaLongType
            _  -> error "internal: invalid type code encountered")
-    0xBD -> return . Newarray . JavaArrayType . poolClassType cp =<< get
+    0xBD -> Newarray . JavaArrayType . poolClassType cp <$> get
     0xBE -> return Arraylength
     0xBF -> return Athrow
-    0xC0 -> return . Checkcast . poolClassType cp =<< get
-    0xC1 -> return . Instanceof . poolClassType cp =<< get
+    0xC0 -> Checkcast . poolClassType cp <$> get
+    0xC1 -> Instanceof . poolClassType cp <$> get
     0xC2 -> return Monitorenter
     0xC3 -> return Monitorexit
     -- Wide instruction
     0xC4 -> do
       embeddedOp <- getWord8
       case embeddedOp of
-        0x15 -> liftM Iload getWord16be
-        0x16 -> liftM Lload getWord16be
-        0x17 -> liftM Fload getWord16be
-        0x18 -> liftM Dload getWord16be
-        0x19 -> liftM Aload getWord16be
-        0x36 -> liftM Istore getWord16be
-        0x37 -> liftM Lstore getWord16be
-        0x38 -> liftM Fstore getWord16be
-        0x39 -> liftM Dstore getWord16be
-        0x3A -> liftM Astore getWord16be
+        0x15 -> Iload <$> getWord16be
+        0x16 -> Lload <$> getWord16be
+        0x17 -> Fload <$> getWord16be
+        0x18 -> Dload <$> getWord16be
+        0x19 -> Aload <$> getWord16be
+        0x36 -> Istore <$> getWord16be
+        0x37 -> Lstore <$> getWord16be
+        0x38 -> Fstore <$> getWord16be
+        0x39 -> Dstore <$> getWord16be
+        0x3A -> Astore <$> getWord16be
         0x84 -> liftM2 Iinc getWord16be (get :: Get Int16)
-        0xA9 -> liftM Ret getWord16be
+        0xA9 -> Ret <$> getWord16be
         _ -> do
           position <- bytesRead
-          error ("Unexpected wide op " ++ (show op) ++ " at position " ++ show (position - 2))
+          error ("Unexpected wide op " ++ show op ++ " at position " ++ show (position - 2))
     0xC5 -> do
       classIndex <- getWord16be
-      dimensions <- getWord8
-      return (Multianewarray (poolClassType cp classIndex) dimensions)
-    0xC6 -> return . Ifnull . (address +) . fromIntegral =<< (get :: Get Int16)
-    0xC7 -> return . Ifnonnull . (address +) . fromIntegral =<< (get :: Get Int16)
-    0xC8 -> return . Goto . (address +) . fromIntegral =<< (get :: Get Int32)
-    0xC9 -> return . Jsr . (address +) . fromIntegral =<< (get :: Get Int32)
+      Multianewarray (poolClassType cp classIndex) <$> getWord8
+    0xC6 -> Ifnull . (address +) . fromIntegral <$> (get :: Get Int16)
+    0xC7 -> Ifnonnull . (address +) . fromIntegral <$> (get :: Get Int16)
+    0xC8 -> Goto . (address +) . fromIntegral <$> (get :: Get Int32)
+    0xC9 -> Jsr . (address +) . fromIntegral <$> (get :: Get Int32)
     _ -> do
       position <- bytesRead
-      error ("Unexpected op " ++ (show op) ++ " at position " ++ show (position - 1))
+      error ("Unexpected op " ++ show op ++ " at position " ++ show (position - 1))
 
 ----------------------------------------------------------------------
 -- Attributes
@@ -676,7 +674,7 @@ splitAttributes cp names = do
     impl n values rest = do
       nameIndex <- getWord16be
       len <- getWord32be
-      let name = (poolUtf8 cp nameIndex)
+      let name = poolUtf8 cp nameIndex
        in case elemIndex name names of
             Just i -> do
               bytes <- getLazyByteString (fromIntegral len)
@@ -689,8 +687,8 @@ splitAttributes cp names = do
 -- Field declarations
 -- | A field of a class.
 data JavaField = JavaField
-  { fieldName :: String
-  , fieldType :: JavaType
+  { fieldName          :: String
+  , fieldType          :: JavaType
   , fieldVisibility    :: Visibility
   , fieldIsStatic      :: Bool
   , fieldIsFinal       :: Bool
@@ -707,8 +705,8 @@ data JavaField = JavaField
 getField :: ConstantPool -> Get JavaField
 getField cp = do
   accessFlags <- getWord16be
-  name <- return . poolUtf8 cp =<< getWord16be
-  fldType <- return . fst . parseTypeDescriptor . poolUtf8 cp =<< getWord16be
+  name <- poolUtf8 cp <$> getWord16be
+  fldType <- fst . parseTypeDescriptor . poolUtf8 cp <$> getWord16be
   ([constantValue, synthetic, deprecated, signature], userAttrs) <-
     splitAttributes cp ["ConstantValue", "Synthetic", "Deprecated", "Signature"]
   return $
@@ -730,7 +728,7 @@ getField cp = do
          []      -> Nothing
          _       -> error "internal: unexpected constant value form")
                    -- Check for synthetic bit in flags and buffer
-      ((accessFlags .&. 0x1000) /= 0 || (not (null synthetic))) -- | ACC_SYNTHETIC
+      ((accessFlags .&. 4096) /= 0 || not (null synthetic)) -- | ACC_SYNTHETIC
                    -- Deprecated flag
       (not (null deprecated))
                    -- Check for enum bit in flags
@@ -765,8 +763,8 @@ getInstructions cp count = do
   read <- bytesRead
   impl 0 read []
   where
-    impl pos prevRead result = do
-      if pos == (fromIntegral count)
+    impl pos prevRead result =
+      if pos == fromIntegral count
         then return (listArray (0, count - 1) (reverse result))
         else do
           inst <- getInstruction cp pos
@@ -825,17 +823,15 @@ getLocalVariableTableEntries cp = do
         len <- getWord16be
         nameIndex <- getWord16be
         descriptorIndex <- getWord16be
-        index <- getWord16be
-        return $
-          LocalVariableTableEntry
-            startPc'
-            len
-            (poolUtf8 cp nameIndex)
-            (fst $ parseTypeDescriptor $ poolUtf8 cp descriptorIndex)
-            index)
+        LocalVariableTableEntry
+          startPc'
+          len
+          (poolUtf8 cp nameIndex)
+          (fst $ parseTypeDescriptor $ poolUtf8 cp descriptorIndex) <$>
+          getWord16be)
 
 parseLocalVariableTable :: ConstantPool -> [L.ByteString] -> [LocalVariableTableEntry]
-parseLocalVariableTable cp buffers = (concat $ map (runGet $ getLocalVariableTableEntries cp) buffers)
+parseLocalVariableTable cp = concatMap (runGet $ getLocalVariableTableEntries cp)
 
 ----------------------------------------------------------------------
 -- Method body
@@ -846,8 +842,7 @@ data MethodBody
          , codeExceptions     :: [ExceptionTableEntry]
          , codeLineNumbers    :: LineNumberTable
          , codeLocalVariables :: LocalVariableTable
-         , codeAttributes     :: [Attribute]
-          }
+         , codeAttributes     :: [Attribute] }
   | AbstractMethod
   | NativeMethod
   deriving (Eq, Show)
@@ -892,13 +887,13 @@ instance Ord JavaMethod where
 getExceptions :: ConstantPool -> Get [JavaType]
 getExceptions cp = do
   exceptionCount <- getWord16be
-  replicateN (getWord16be >>= return . poolClassType cp) exceptionCount
+  replicateN (poolClassType cp <$> getWord16be) exceptionCount
 
 getMethod :: ConstantPool -> Get JavaMethod
 getMethod cp = do
   accessFlags <- getWord16be
-  name <- getWord16be >>= return . (poolUtf8 cp)
-  (returnType, parameterTypes) <- getWord16be >>= return . parseMethodDescriptor . (poolUtf8 cp)
+  name <- poolUtf8 cp <$> getWord16be
+  (returnType, parameterTypes) <- parseMethodDescriptor . poolUtf8 cp <$> getWord16be
   ([codeVal, exceptionsVal, syntheticVal, deprecatedVal], userAttrs) <-
     splitAttributes cp ["Code", "Exceptions", "Synthetic", "Deprecated"]
   let isStatic' = (accessFlags .&. 0x0008) /= 0 -- | ACC_STATIC
@@ -921,7 +916,7 @@ getMethod cp = do
         isStrictFp'
         (not $ null syntheticVal)
         (not $ null deprecatedVal)
-        (if ((accessFlags .&. 0x0100) /= 0) -- | ACC_NATIVE
+        (if (accessFlags .&. 256) /= 0
            then NativeMethod
            else if isAbstract
                   then AbstractMethod
@@ -985,20 +980,14 @@ methodReturnType = methodIdReturnType . methodId
 lookupInstruction :: JavaMethod -> PC -> Instruction
 lookupInstruction method pc =
   case methodBody method of
-    Code _ _ cfg _ _ _ _ ->
-      case (cfgInstByPC cfg pc) of
-        Just i  -> i
-        Nothing -> error "internal: failed to index inst stream"
+    Code _ _ cfg _ _ _ _ -> fromMaybe (error "internal: failed to index inst stream") (cfgInstByPC cfg pc)
     _ -> error ("Method " ++ show method ++ " has no body")
 
 -- Returns pc of next instruction.
 nextPc :: JavaMethod -> PC -> PC
 nextPc method pc =
   case methodBody method of
-    Code _ _ cfg _ _ _ _ ->
-      case nextPC cfg pc of
-        Nothing  -> error "internal: nextPc: no next instruction"
-        Just npc -> npc
+    Code _ _ cfg _ _ _ _ -> fromMaybe (error "internal: nextPc: no next instruction") (nextPC cfg pc)
     _ -> error "internal: unexpected method body form"
 
 --    trace ("nextPC: method = " ++ show method) $
@@ -1018,7 +1007,7 @@ hasDebugInfo method =
     _                        -> False
 
 methodLineNumberTable :: JavaMethod -> Maybe LineNumberTable
-methodLineNumberTable me = do
+methodLineNumberTable me =
   case methodBody me of
     Code _ _ _ _ lns _ _ -> Just lns
     _                    -> Nothing
@@ -1157,9 +1146,7 @@ prettyClass cl =
 getClass :: Get JavaClass
 getClass = do
   magic <- getWord32be
-  (if magic /= 0xCAFEBABE
-     then error "Unexpected magic value"
-     else return ())
+  when (magic /= 3405691582) $ error "Unexpected magic value"
   minorVersion' <- getWord16be
   majorVersion' <- getWord16be
   cp <- getConstantPool
@@ -1175,16 +1162,16 @@ getClass = do
       majorVersion'
       minorVersion'
       cp
-      ((accessFlags .&. 0x0001) /= 0) -- | ACC_PUBLIC
-      ((accessFlags .&. 0x0010) /= 0) -- | ACC_FINAL
-      ((accessFlags .&. 0x0020) /= 0) -- | ACC_SUPER
-      ((accessFlags .&. 0x0200) /= 0) -- | ACC_INTERFACE
-      ((accessFlags .&. 0x0400) /= 0) -- | ACC_ABSTRACT
+      ((accessFlags .&. 1) /= 0)
+      ((accessFlags .&. 16) /= 0)
+      ((accessFlags .&. 32) /= 0)
+      ((accessFlags .&. 512) /= 0)
+      ((accessFlags .&. 1024) /= 0)
       thisClass
       (if superClassIndex == 0
          then Nothing
          else case poolClassType cp superClassIndex of
-                JavaClassType name -> (Just name)
+                JavaClassType name -> Just name
                 classType -> error ("Unexpected class type " ++ show classType))
       interfaces
       fields
