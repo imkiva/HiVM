@@ -34,15 +34,18 @@ testFiles = do
   where
     isClass = (".class" ==) . takeExtension
 
-load :: [FilePath] -> [IO String]
-load = map (fmap prettyMainMethod . CP.loadClassFromFile)
+testFiles2 :: IO [FilePath]
+testFiles2 = return ["/Users/kiva/Documents/OpenJDK8" </> "Lambda.class"]
+
+testClasses :: [FilePath] -> [IO String]
+testClasses = map (fmap prettyMainMethod . CP.loadClassFromFile)
 
 main :: IO ()
 main = do
   putStrLn "\n\n"
-  fs <- testFiles
+  fs <- liftM2 (++) testFiles testFiles2
   forM_
-    (load fs)
+    (testClasses fs)
     (\io -> do
        str <- io
        putStrLn str)
