@@ -2,7 +2,7 @@ module ClassPath.ClassFileParser
   -- * Class declarations
   ( JavaClass(..)
   , classMethods
-  , loadClass
+  , loadClassFromFile
   , lookupMethod
   , prettyClass
   , getClass
@@ -1290,8 +1290,8 @@ lookupMethod :: JavaClass -> MethodId -> Maybe JavaMethod
 lookupMethod javaClass key = Map.lookup key (classMethodMap javaClass)
 
 -- | Load and parse the class at the given path.
-loadClass :: FilePath -> IO JavaClass
-loadClass path = do
+loadClassFromFile :: FilePath -> IO JavaClass
+loadClassFromFile path = do
   handle <- openBinaryFile path ReadMode
   contents <- L.hGetContents handle
   let result = runGet getClass contents
