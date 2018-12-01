@@ -20,6 +20,7 @@ module ClassPath.ControlFlowGraph
   , cfgInstByPC
   , succs
     -- * Pretty printing
+  , prettyControlFlowGraph
   , prettyBasicBlock
   , prettyInstString
   , cfgToDot
@@ -435,15 +436,19 @@ ehsForBB :: ExceptionTable -> BasicBlock -> ExceptionTable
 ehsForBB extbl bb = nub $ concatMap (\pc -> filter (ehCoversPC pc) extbl) (bbPCs bb)
 
 modErr :: String -> a
-modErr msg = error $ "Language.JVM.CFG: " ++ msg
+modErr msg = error $ "ControlFlowGraph: " ++ msg
 
 --------------------------------------------------------------------------------
 -- Pretty-printing
+prettyControlFlowGraph :: ControlFlowGraph -> String
+prettyControlFlowGraph cfg = "ControlFlowGraph {\n" ++ showOnNewLines 2 prettifiedBBs ++ "\n}"
+  where
+    prettifiedBBs = (map prettyBasicBlock . allBBs) cfg
+
 prettyBasicBlock :: BasicBlock -> String
-prettyBasicBlock bb =
-  "BasicBlock(" ++
-  show (bbId bb) ++
-  "):\n" ++ unlines (map (\(pc, inst) -> "  " ++ show pc ++ ": " ++ prettyInstString inst) (bbInsts bb))
+prettyBasicBlock bb = "BasicBlock(" ++ show (bbId bb) ++ "):\n" ++ instString
+  where
+    instString = showOnNewLines 4 (map (\(pc, inst) -> show pc ++ ": " ++ prettyInstString inst) (bbInsts bb))
 
 prettyInstString :: Instruction -> String
 prettyInstString (Invokevirtual (JavaClassType cn) mk) = "Invokevirtual " ++ prettyMethodKeyString cn mk
@@ -506,7 +511,7 @@ cfgToDot extbl cfg methodName =
 --------------------------------------------------------------------------------
 -- Instances
 instance Show ControlFlowGraph where
-  show cfg = "CFG{ allBBs = " ++ show (allBBs cfg) ++ " }" -- unlines $ map show $ allBBs cfg
+  show cfg = "ControlFlowGraph { allBBs = " ++ show (allBBs cfg) ++ " }"
 
 instance Eq ControlFlowGraph where
   cfg1 == cfg2 = allBBs cfg1 == allBBs cfg2 && bbSuccs cfg1 == bbSuccs cfg2

@@ -65,7 +65,7 @@ module ClassPath.ClassFileParser
   , isFloatType
   , isRefType
   -- ** Instructions
-  , JavaFieldId(..)
+  , FieldId(..)
   , Instruction(..)
   -- ** Class names
   , JavaClassName
@@ -97,11 +97,6 @@ import           ClassPath.ControlFlowGraph
 -- Version of replicate with arguments convoluted for parser.
 replicateN :: (Integral b, Monad m) => m a -> b -> m [a]
 replicateN fn i = sequence (replicate (fromIntegral i) fn)
-
-showOnNewLines :: Int -> [String] -> String
-showOnNewLines n [] = replicate n ' ' ++ "None"
-showOnNewLines n [a] = replicate n ' ' ++ a
-showOnNewLines n (a:rest) = replicate n ' ' ++ a ++ "\n" ++ showOnNewLines n rest
 
 ----------------------------------------------------------------------
 -- Type
@@ -339,14 +334,14 @@ poolNameAndType cp i =
     NameAndType nameIndex typeIndex -> (poolUtf8 cp nameIndex, poolUtf8 cp typeIndex)
     _ -> error ("Index " ++ show i ++ " is not a name and type reference.")
 
-poolFieldRef :: ConstantPool -> ConstantPoolIndex -> JavaFieldId
+poolFieldRef :: ConstantPool -> ConstantPoolIndex -> FieldId
 poolFieldRef cp i =
   case cp ! i of
     FieldRef classIndex ntIndex ->
       let (name, fldDescriptor) = poolNameAndType cp ntIndex
           (fldType, []) = parseTypeDescriptor fldDescriptor
           JavaClassType cName = poolClassType cp classIndex
-       in JavaFieldId cName name fldType
+       in FieldId cName name fldType
     _ -> error ("Index " ++ show i ++ " is not a field reference.")
 
 poolInterfaceMethodRef :: ConstantPool -> ConstantPoolIndex -> (JavaType, MethodId)
@@ -694,8 +689,8 @@ splitAttributes cp names = do
 -- Field declarations
 -- | A field of a class.
 data JavaField = JavaField
-  { fieldName          :: String
-  , fieldType          :: JavaType
+  { fieldName :: String
+  , fieldType :: JavaType
   , fieldVisibility    :: Visibility
   , fieldIsStatic      :: Bool
   , fieldIsFinal       :: Bool
@@ -709,36 +704,6 @@ data JavaField = JavaField
   , fieldAttributes    :: [Attribute]
   } deriving (Show)
 
--- instance Show Field where
---   show (Field (FieldKey name tp)
---               visibility
---               isStatic
---               isFinal
---               isVolatile
---               isTransient
---               constantValue
---               isSynthetic
---               isDeprecated
---               isEnum
---               signature
---               attrs)
---     = show visibility ++ " "
---     ++ (if isStatic then "static " else "")
---     ++ (if isFinal then "final " else "")
---     ++ (if isVolatile then "volatile " else "")
---     ++ (if isTransient then "transient " else "")
---     ++ show tp ++ " "
---     ++ name
---     ++ case constantValue of
---          Nothing -> ""
---          Just (Long l)    -> " = " ++ show l ++ " "
---          Just (Float f)   -> " = " ++ show f ++ " "
---          Just (Double  d) -> " = " ++ show d ++ " "
---          Just (Integer i) -> " = " ++ show i ++ " "
---          Just (String  s) -> " = " ++ show s ++ " "
---     ++ (if isSynthetic then " synthetic " else "")
---     ++ (if isDeprecated then " deprecated " else "")
---     ++ show attrs
 getField :: ConstantPool -> Get JavaField
 getField cp = do
   accessFlags <- getWord16be
@@ -750,7 +715,6 @@ getField cp = do
     JavaField
       name
       fldType
-                   -- Visibility
       (case accessFlags .&. 0x7 of
          0x0000 -> Default
          0x0001 -> Public -- | ACC_PUBLIC
@@ -925,52 +889,6 @@ data JavaMethod = JavaMethod
 instance Ord JavaMethod where
   compare m1 m2 = compare (methodId m1) (methodId m2)
 
--- instance Show Method where
---   show (Method (MethodKey name returnType parameterTypes)
---                visibility
---                isStatic
---                isFinal
---                isSynchronized
---                isStrictFp
---                body
---                exceptions
---                isSynthetic
---                isDeprecated
---                attrs)
---     = show visibility ++ " "
---     ++ (if isStatic then "static"  else "")
---     ++ (if isFinal then "final " else "")
---     ++ (if isSynchronized then "synchronized " else "")
---     ++ (case body of
---           AbstractMethod -> "abstract "
---           NativeMethod -> "native "
---           _ -> "")
---     ++ (if isStrictFp then "strict " else "")
---     ++ case returnType of
---          Just tp -> (show tp)
---          Nothing -> "void"
---     ++ " " ++ name
---     ++ "(" ++ showCommaSeparatedList parameterTypes ++ ")"
---     ++ show attrs ++ "\n"
---     ++ (if isSynthetic then "    synthetic\n" else "")
---     ++ (if isDeprecated then "    deprecated\n" else "")
---     ++ case body of
---          Code maxStack maxLocals is exceptions lineNumbers _ codeAttrs ->
---               "    Max Stack:    " ++ show maxStack
---            ++ "    Max Locals:   " ++ show maxLocals ++ "\n"
---            ++ (showOnNewLines 4
---                  [ show i ++ ": " ++ show inst
---                           ++ (case Map.lookup i lineNumbers of
---                                 Just l -> "(line " ++ show l ++ ")"
---                                 Nothing -> "")
---                    | (i, Just inst) <- assocs is ])
---            ++ if null exceptions
---                  then ""
---                  else "\n    Exceptions:   " ++ show exceptions
---            ++ if null codeAttrs
---                  then ""
---                  else "\n    Attributes:   " ++ show codeAttrs
---          _ -> ""
 getExceptions :: ConstantPool -> Get [JavaType]
 getExceptions cp = do
   exceptionCount <- getWord16be
@@ -1224,10 +1142,10 @@ prettyClass cl =
   show (superClass cl) ++
   "\n" ++
   "Interfaces:\n" ++
-  showOnNewLines 2 (map show (classInterfaces cl)) ++
+  showOnNewLines 2 (map show $ classInterfaces cl) ++
   "\n" ++
   "Fields:\n" ++
-  showOnNewLines 2 (map show (classFields cl)) ++
+  showOnNewLines 2 (map show $ classFields cl) ++
   "\n" ++
   "Methods:\n" ++
   showOnNewLines 2 (map show $ classMethods cl) ++
@@ -1271,7 +1189,6 @@ getClass = do
       interfaces
       fields
       (Map.fromList (map (\m -> (methodId m, m)) methods))
-                     -- Source file
       (case sourceFile of
          [bytes] -> Just $ poolUtf8 cp $ runGet getWord16be bytes
          []      -> Nothing

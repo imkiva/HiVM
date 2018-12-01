@@ -19,7 +19,7 @@ module ClassPath.Common
   , isRefType
   , prettyJavaType
     -- * FieldId
-  , JavaFieldId(..)
+  , FieldId(..)
   , prettyFieldId
     -- * MethodId
   , MethodId(..)
@@ -43,6 +43,7 @@ module ClassPath.Common
    -- * Miscellaneous
   , slashesToDots
   , dotsToSlashes
+  , showOnNewLines
   ) where
 
 import           Data.Array
@@ -161,14 +162,14 @@ isRefType (JavaClassType _) = True
 isRefType _             = False
 
 -- | Java Field
-data JavaFieldId = JavaFieldId
+data FieldId = FieldId
   { fieldIdClass :: !JavaClassName -- Class name
   , fieldIdName  :: !String -- Field name
   , fieldIdType  :: !JavaType -- Field type
   } deriving (Eq, Ord, Show)
 
 -- TODO: Refactor
-prettyFieldId :: JavaFieldId -> String
+prettyFieldId :: FieldId -> String
 prettyFieldId fldId = dotsToSlashes (unpackClassName (fieldIdClass fldId)) ++ "." ++ fieldIdName fldId
 
 -- | A unique identifier for looking up a method in a class.
@@ -261,8 +262,8 @@ data Instruction
   | Freturn -- | Return float from method
   | Fstore LocalVariableIndex -- | Store float into local variable
   | Fsub -- | Subtract float
-  | Getfield JavaFieldId -- | Fetch field from object
-  | Getstatic JavaFieldId -- | Get static field from class
+  | Getfield FieldId -- | Fetch field from object
+  | Getstatic FieldId -- | Get static field from class
   | Goto PC -- | Branch always
   | I2b -- | Convert int to byte
   | I2c -- | Convert int to char
@@ -355,8 +356,8 @@ data Instruction
   | Nop -- | Do nothing
   | Pop -- | Pop the top operand stack value
   | Pop2 -- | Pop the top one or two operand stack values
-  | Putfield JavaFieldId -- | Set field in object
-  | Putstatic JavaFieldId -- | Set static field in class
+  | Putfield FieldId -- | Set field in object
+  | Putstatic FieldId -- | Set static field in class
   | Ret LocalVariableIndex -- | Return from subroutine
   | Return -- | Return void from method
   | Saload -- | Load short from array
@@ -473,3 +474,8 @@ instance Show JavaType where
 
 prettyJavaType :: JavaType -> Doc
 prettyJavaType = text . show
+
+showOnNewLines :: Int -> [String] -> String
+showOnNewLines n [] = replicate n ' ' ++ "None"
+showOnNewLines n [a] = replicate n ' ' ++ a
+showOnNewLines n (a:rest) = replicate n ' ' ++ a ++ "\n" ++ showOnNewLines n rest

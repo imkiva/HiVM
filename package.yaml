@@ -30,6 +30,9 @@ dependencies:
 - bytestring
 - containers
 - data-binary-ieee754
+- deepseq
+- directory
+- filepath
 
 
 ghc-options: -Wall

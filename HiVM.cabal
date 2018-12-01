@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: f6731524ca68e87e234d7eba6e4c83b52ec425917e764ebc277d0c3f235a9d46
+-- hash: bff0ef08217d7b32da9ce0a96c144899e0f2abddc8d0746bd60bf60d7b5c004a
 
 name:           HiVM
 version:        0.1.0.0
@@ -43,7 +43,10 @@ library
     , bytestring
     , containers
     , data-binary-ieee754
+    , deepseq
+    , directory
     , fgl
+    , filepath
     , fingertree
     , pretty
     , zlib
@@ -64,7 +67,10 @@ executable HiVM-exe
     , bytestring
     , containers
     , data-binary-ieee754
+    , deepseq
+    , directory
     , fgl
+    , filepath
     , fingertree
     , pretty
     , zlib
@@ -86,7 +92,10 @@ test-suite HiVM-test
     , bytestring
     , containers
     , data-binary-ieee754
+    , deepseq
+    , directory
     , fgl
+    , filepath
     , fingertree
     , pretty
     , zlib
