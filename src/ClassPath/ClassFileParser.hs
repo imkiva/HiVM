@@ -55,7 +55,6 @@ module ClassPath.ClassFileParser
   , lookupLocalVariableByName
   , prettyInst
   , slashesToDots
-  , cfgToDot
   -- * Re-exports
   -- ** Types
   , JavaType(..)
@@ -859,7 +858,7 @@ getCode cp = do
     Code
       maxStack
       maxLocals
-      (buildCFG exceptionTable instructions)
+      (buildControlFlowGraph exceptionTable instructions)
       exceptionTable
       (parseLineNumberTable lineNumberTables)
       (parseLocalVariableTable cp localVariableTables)
@@ -987,7 +986,7 @@ lookupInstruction method pc =
 nextPc :: JavaMethod -> PC -> PC
 nextPc method pc =
   case methodBody method of
-    Code _ _ cfg _ _ _ _ -> fromMaybe (error "internal: nextPc: no next instruction") (nextPC cfg pc)
+    Code _ _ cfg _ _ _ _ -> fromMaybe (error "internal: nextPc: no next instruction") (cfgNextPC cfg pc)
     _ -> error "internal: unexpected method body form"
 
 --    trace ("nextPC: method = " ++ show method) $

@@ -7,24 +7,24 @@ module ClassPath.ControlFlowGraph
     -- * Basic blocks
     -- $basicblocks
   ( BasicBlock
-  , bbId
-  , bbInsts
-  , BBId(..)
-  , prettyBBId
+  , basicBlockId
+  , basicBlockInstrs
+  , BasicBlockId(..)
     -- * Control flow graphs
   , ControlFlowGraph
-  , bbById
-  , bbByPC
-  , nextPC
-  , allBBs
-  , buildCFG
+  , basicBlockById
+  , basicBlockByPC
+  , cfgNextPC
+  , cfgAllBlocks
+  , buildControlFlowGraph
   , cfgInstByPC
-  , succs
+  , cfgSuccs
+  , basicBlockExceptions
     -- * Pretty printing
   , prettyControlFlowGraph
   , prettyBasicBlock
   , prettyInstString
-  , cfgToDot
+  , prettyBasicBlockId
     -- * Post dominators
   , isImmediatePostDominator
   , getPostDominators
@@ -49,33 +49,33 @@ import           ClassPath.Common
 --------------------------------------------------------------------------------
 -- Control flow graph construction
 data ControlFlowGraph = ControlFlowGraph
-  { bbById  :: BBId -> Maybe BasicBlock
-  , bbByPC  :: PC -> Maybe BasicBlock
-  , nextPC  :: PC -> Maybe PC
-  , allBBs  :: [BasicBlock]
-  , bbSuccs :: [(BBId, BBId)]
-  , preds   :: BBId -> [BBId]
-  , succs   :: BBId -> [BBId]
-  , graph   :: Gr BBId ()
-  , nodeMap :: NodeMap BBId
-  , ipdoms  :: M.Map BBId BBId
-  , pdoms   :: M.Map BBId [BBId]
+  { basicBlockById  :: BasicBlockId -> Maybe BasicBlock
+  , basicBlockByPC  :: PC -> Maybe BasicBlock
+  , cfgNextPC       :: PC -> Maybe PC
+  , cfgAllBlocks    :: [BasicBlock]
+  , basicBlockSuccs :: [(BasicBlockId, BasicBlockId)]
+  , basicBlockPreds :: BasicBlockId -> [BasicBlockId]
+  , cfgSuccs           :: BasicBlockId -> [BasicBlockId]
+  , cfgGraph           :: Gr BasicBlockId ()
+  , cfgNodeMap         :: NodeMap BasicBlockId
+  , cfgIPdoms          :: M.Map BasicBlockId BasicBlockId
+  , cfgPdoms           :: M.Map BasicBlockId [BasicBlockId]
   }
 
 entryBlock, exitBlock :: BasicBlock
-entryBlock = BB BBIdEntry []
+entryBlock = BasicBlock BasicBlockIdEntry []
 
-exitBlock = BB BBIdExit []
+exitBlock = BasicBlock BasicBlockIdExit []
 
 -- | Build a control-flow graph from an instruction stream.
 --   We assume that the first instruction in the instruction stream is the only
 --   external entry point in the sequence (typically, the method entry point).
-buildCFG :: ExceptionTable -> InstructionStream -> ControlFlowGraph
-buildCFG extbl istrm = cfg
+buildControlFlowGraph :: ExceptionTable -> InstructionStream -> ControlFlowGraph
+buildControlFlowGraph exceptionTable stream = cfg
   where
     cfg =
       ControlFlowGraph
-        { bbByPC =
+        { basicBlockByPC =
             \pc ->
               if pc < firstPC || pc > lastPC
                 then Nothing
@@ -83,17 +83,17 @@ buildCFG extbl istrm = cfg
                        [(_, bb)] -> Just bb
                        [] -> Nothing
                        _ -> error $ "bbByPC: internal: " ++ "multiple interval match"
-        , bbById =
+        , basicBlockById =
             \case
-              BBId pc -> bbByPC cfg pc
-              BBIdEntry -> Just entryBlock
-              BBIdExit -> Just exitBlock
-        , nextPC =
+              BasicBlockId pc -> basicBlockByPC cfg pc
+              BasicBlockIdEntry -> Just entryBlock
+              BasicBlockIdExit -> Just exitBlock
+        , cfgNextPC =
             \pc ->
-              case bbByPC cfg pc of
+              case basicBlockByPC cfg pc of
                 Nothing -> Nothing
                 Just bb ->
-                  case bbSuccPC bb pc of
+                  case basicBlockSuccPC bb pc of
                     Nothing
               -- The given PC has no successor in 'bb', so it must be the leader
               -- PC of the next BB encountered during findNextBB.
@@ -101,13 +101,13 @@ buildCFG extbl istrm = cfg
                       let findNextBB i
                             | i > lastPC = Nothing
                             | otherwise =
-                              case bbByPC cfg i of
+                              case basicBlockByPC cfg i of
                                 Just _  -> Just i
                                 Nothing -> findNextBB (i + 1)
                        in findNextBB (pc + 1)
                     jpc -> jpc
-        , allBBs = entryBlock : exitBlock : DF.toList finalBlocks
-        , bbSuccs =
+        , cfgAllBlocks = entryBlock : exitBlock : DF.toList finalBlocks
+        , basicBlockSuccs =
             (\f -> DF.foldr f [] finalBlocks) $ \bb acc ->
               let newSuccs
                 -- Identify a flow edge from bb to x when x's leader is a branch
@@ -115,56 +115,55 @@ buildCFG extbl istrm = cfg
                    =
                     map
                       (\bt ->
-                         case bbByPC cfg bt of
+                         case basicBlockByPC cfg bt of
                            Nothing -> error "newSuccs: internal: invalid BBId"
-                           Just sbb -> (bbId bb, bbId sbb))
+                           Just sbb -> (basicBlockId bb, basicBlockId sbb))
                       (brTargets $ terminatorPC bb) ++
                     -- Identify a flow edge from bb to x when bb's terminator
                     -- doesn't break the control flow path x's leader is the
                     -- instruction successor of bb's terminator.
                     case do let tpc = terminatorPC bb
-                            breaksCFP <- breaksControlFlow `fmap` bbInstByPC bb tpc
+                            breaksCFP <- breaksControlFlow `fmap` basicBlockInstByPC bb tpc
                             if breaksCFP
                               then Nothing
-                              else bbByPC cfg =<< nextPC cfg tpc of
+                              else basicBlockByPC cfg =<< cfgNextPC cfg tpc of
                       Nothing  -> []
-                      Just nbb -> [(bbId bb, bbId nbb)]
+                      Just nbb -> [(basicBlockId bb, basicBlockId nbb)]
             -- NB: Hook up entry/exit blocks here
                in (if leaderPC bb == firstPC
-                     then ((BBIdEntry, bbId bb) :)
+                     then ((BasicBlockIdEntry, basicBlockId bb) :)
                      else id) $
                   case newSuccs of
-                    [] -> (bbId bb, BBIdExit) : acc
+                    [] -> (basicBlockId bb, BasicBlockIdExit) : acc
                     _  -> newSuccs ++ acc
-        , preds =
+        , basicBlockPreds =
             \bbid ->
-              case bbById cfg bbid of
+              case basicBlockById cfg bbid of
                 Nothing -> error "CFG.preds: invalid BBId"
-                Just _  -> map fst $ filter ((== bbid) . snd) $ bbSuccs cfg
-        , succs =
+                Just _ -> map fst $ filter ((== bbid) . snd) $ basicBlockSuccs cfg
+        , cfgSuccs =
             \bbid ->
-              case bbById cfg bbid of
+              case basicBlockById cfg bbid of
                 Nothing -> error "CFG.succs: invalid BBId"
-                Just _  -> map snd $ filter ((== bbid) . fst) $ bbSuccs cfg
-        , graph = gr
-        , nodeMap = nm
-        , ipdoms = M.fromList . map pairFromInts . ipdom $ gr
-        , pdoms = M.fromList . map adjFromInts . pdom $ gr
+                Just _ -> map snd $ filter ((== bbid) . fst) $ basicBlockSuccs cfg
+        , cfgGraph = gr
+        , cfgNodeMap = nm
+        , cfgIPdoms = M.fromList . map pairFromInts . ipdom $ gr
+        , cfgPdoms = M.fromList . map adjFromInts . pdom $ gr
         }
     (gr, nm) = buildGraph cfg
     -- post-dominators are just dominators where the exit is the root
-    ipdom = flip iDom (fst $ mkNode_ nm BBIdExit) . grev
-    pdom = flip dom (fst $ mkNode_ nm BBIdExit) . grev
+    ipdom = flip iDom (fst $ mkNode_ nm BasicBlockIdExit) . grev
+    pdom = flip dom (fst $ mkNode_ nm BasicBlockIdExit) . grev
     pairFromInts (n, n') = (lkup n, lkup n')
-    lkup n = fromMaybe (modErr "found node not in graph") $ lab gr n
-    --adjToInts (n, ns) = (fromEnum n, map fromEnum ns)
+    lkup n = fromMaybe (modError "found node not in graph") $ lab gr n
     adjFromInts (n, ns) = (lkup n, map lkup ns)
-    finalBlocks = blocks $ foldr process (BBInfo I.empty (BB (BBId firstPC) []) False) rinsts
+    finalBlocks = blocks $ foldr process (BasicBlockInfo I.empty (BasicBlock (BasicBlockId firstPC) []) False) rinsts
     --
-    process i@(pc, _) bbi = processInst (lastWasBranch bbi || isBrTarget pc) (isBrInst pc) firstPC lastPC i bbi
+    process i@(pc, _) bbi = processInst (isLastBlockBranch bbi || isBrTarget pc) (isBrInst pc) firstPC lastPC i bbi
     -- instruction sequence fixup & reordering
     rinsts@((lastPC, _):_) = reverse insts
-    insts@((firstPC, _):_) = map fixup $ filter valid $ assocs istrm
+    insts@((firstPC, _):_) = map fixup $ filter valid $ assocs stream
       where
         valid (_, Just {}) = True
         valid _            = False
@@ -173,29 +172,29 @@ buildCFG extbl istrm = cfg
     --
     isBrInst pc = not . null $ brTargets pc
     isBrTarget pc = pc `elem` concat (M.elems btm)
-    btm = mkBrTargetMap extbl istrm
+    btm = makeBrTargetMap exceptionTable stream
     brTargets pc = fromMaybe [] $ M.lookup pc btm
 
 --  let dot = cfgToDot extbl cfg "???" in
 --  trace ("dot:\n" ++ dot) $
 -- | We want to keep the node map around to look up specific nodes
 --   later, even though I think we only do that once
-buildGraph :: ControlFlowGraph -> (Gr BBId (), NodeMap BBId)
+buildGraph :: ControlFlowGraph -> (Gr BasicBlockId (), NodeMap BasicBlockId)
 buildGraph cfg = (mkGraph ns es, nm)
   where
-    (ns, nm) = mkNodes new (map bbId . allBBs $ cfg)
-    es = fromMaybe (modErr "edge with unknown nodes") $ mkEdges nm edgeTriples
-    edgeTriples :: [(BBId, BBId, ())] -- ready to become UEdges
-    edgeTriples = map (\(n1, n2) -> (n1, n2, ())) (bbSuccs cfg)
+    (ns, nm) = mkNodes new (map basicBlockId . cfgAllBlocks $ cfg)
+    es = fromMaybe (modError "edge with unknown nodes") $ mkEdges nm edgeTriples
+    edgeTriples :: [(BasicBlockId, BasicBlockId, ())] -- ready to become UEdges
+    edgeTriples = map (\(n1, n2) -> (n1, n2, ())) (basicBlockSuccs cfg)
 
 -- | @isImmediatePostDominator g x y@ returns @True@ if @y@
 --   immediately post-dominates @x@ in control-flow graph @g@.
-isImmediatePostDominator :: ControlFlowGraph -> BBId -> BBId -> Bool
-isImmediatePostDominator cfg bb bb' = (== Just bb') . M.lookup bb . ipdoms $ cfg
+isImmediatePostDominator :: ControlFlowGraph -> BasicBlockId -> BasicBlockId -> Bool
+isImmediatePostDominator cfg bb bb' = (== Just bb') . M.lookup bb . cfgIPdoms $ cfg
 
 -- | Calculate the post-dominators of a given basic block.
-getPostDominators :: ControlFlowGraph -> BBId -> [BBId]
-getPostDominators cfg bb = M.findWithDefault [] bb (pdoms cfg)
+getPostDominators :: ControlFlowGraph -> BasicBlockId -> [BasicBlockId]
+getPostDominators cfg bb = M.findWithDefault [] bb (cfgPdoms cfg)
 
 --------------------------------------------------------------------------------
 -- $basicblocks
@@ -216,38 +215,31 @@ getPostDominators cfg bb = M.findWithDefault [] bb (pdoms cfg)
 -- | Identifies basic blocks by their position
 --   in the instruction stream, or by the special
 --   `BBIdEntry` or `BBIdExit` constructors.
-data BBId
-  = BBIdEntry
-  | BBIdExit
-  | BBId PC
+data BasicBlockId
+  = BasicBlockIdEntry
+  | BasicBlockIdExit
+  | BasicBlockId PC
   deriving (Eq, Ord, Show)
 
-prettyBBId :: BBId -> Doc
-prettyBBId bbid =
-  case bbid of
-    BBIdEntry -> "BB%entry"
-    BBIdExit  -> "BB%exit"
-    BBId pc   -> "BB%" <> int (fromIntegral pc)
-
-instance Enum BBId where
-  toEnum 0 = BBIdEntry
-  toEnum 1 = BBIdExit
-  toEnum n = BBId (fromIntegral n - 2)
-  fromEnum BBIdEntry = 0
-  fromEnum BBIdExit  = 1
-  fromEnum (BBId n)  = fromIntegral n + 2
+instance Enum BasicBlockId where
+  toEnum 0 = BasicBlockIdEntry
+  toEnum 1 = BasicBlockIdExit
+  toEnum n = BasicBlockId (fromIntegral n - 2)
+  fromEnum BasicBlockIdEntry = 0
+  fromEnum BasicBlockIdExit  = 1
+  fromEnum (BasicBlockId n)  = fromIntegral n + 2
 
 -- | A basic block consists of an identifier and
 --   the instructions contained in that block.
-data BasicBlock = BB
-  { bbId    :: BBId
-  , bbInsts :: [(PC, Instruction)]
+data BasicBlock = BasicBlock
+  { basicBlockId     :: BasicBlockId
+  , basicBlockInstrs :: [(PC, Instruction)]
   } deriving (Show)
 
-data BBInfo = BBInfo
-  { blocks        :: IntervalMap PC BasicBlock
-  , currBB        :: BasicBlock
-  , lastWasBranch :: Bool -- True iff the last instruction examined was a
+data BasicBlockInfo = BasicBlockInfo
+  { blocks            :: IntervalMap PC BasicBlock
+  , currentBlock      :: BasicBlock
+  , isLastBlockBranch :: Bool -- True iff the last instruction examined was a
                            -- branch/return for bb splitting purposes
   }
 
@@ -260,29 +252,33 @@ processInst ::
   -> PC -- | Value of first PC in instruction sequence
   -> PC -- | Value of last PC in instruction sequence
   -> (PC, Instruction) -- | Current PC and instruction
-  -> BBInfo -- | BB accumulator
-  -> BBInfo
+  -> BasicBlockInfo -- | BB accumulator
+  -> BasicBlockInfo
 processInst isLeader isBranchInst firstPC lastPC (pc, inst) bbi =
   let bbi' =
         if isLeader
           then newBB
           else noNewBB
    in bbi'
-        { lastWasBranch = isBranchInst || breaksControlFlow inst
+        { isLastBlockBranch = isBranchInst || breaksControlFlow inst
         , blocks =
             if pc == lastPC
-              then mk (currBB bbi') `I.union` blocks bbi'
+              then mk (currentBlock bbi') `I.union` blocks bbi'
               else blocks bbi'
         }
   where
     mk bb =
-      let bb' = bb {bbInsts = reverse (bbInsts bb)}
-       in I.singleton (bbInterval bb') bb'
-    addInst bb = bb {bbInsts = (pc, inst) : bbInsts bb}
-    noNewBB = bbi {currBB = addInst (currBB bbi)}
+      let bb' = bb {basicBlockInstrs = reverse (basicBlockInstrs bb)}
+       in I.singleton (basicBlockInterval bb') bb'
+    addInst bb = bb {basicBlockInstrs = (pc, inst) : basicBlockInstrs bb}
+    noNewBB = bbi {currentBlock = addInst (currentBlock bbi)}
     newBB
       | pc == firstPC = noNewBB
-      | otherwise = bbi {blocks = mk (currBB bbi) `I.union` blocks bbi, currBB = addInst (BB (BBId pc) [])}
+      | otherwise =
+        bbi
+          { blocks = mk (currentBlock bbi) `I.union` blocks bbi
+          , currentBlock = addInst (BasicBlock (BasicBlockId pc) [])
+          }
 
 --------------------------------------------------------------------------------
 -- Branch target calculation
@@ -298,14 +294,14 @@ processInst isLeader isBranchInst firstPC lastPC (pc, inst) bbi =
 --
 -- We do a (fairly sparse) abstract execution of the method, tracking the state
 -- pertaining to jsr/ret pairings along all execution paths.
-mkBrTargetMap :: ExceptionTable -> InstructionStream -> Map PC [PC]
-mkBrTargetMap extbl istrm = foldr f M.empty istrm'
+makeBrTargetMap :: ExceptionTable -> InstructionStream -> Map PC [PC]
+makeBrTargetMap exceptionTable stream = foldr f M.empty stream'
   where
-    f (pc, i) acc = maybe acc (\v -> M.insert pc v acc) $ getBrPCs i
-    istrm'@((firstPC, _):_) = assocs istrm
+    f (pc, i) acc = maybe acc (\v -> M.insert pc v acc) $ getBranchPCs i
+    stream'@((firstPC, _):_) = assocs stream
     --
-    getBrPCs Nothing = Nothing
-    getBrPCs (Just i) =
+    getBranchPCs Nothing = Nothing
+    getBranchPCs (Just i) =
       case i of
         Goto pc -> Just [pc]
         If_acmpeq pc -> Just [pc]
@@ -326,7 +322,7 @@ mkBrTargetMap extbl istrm = foldr f M.empty istrm'
         Ifnull pc -> Just [pc]
         Jsr pc -> Just [pc]
         Ret {} ->
-          let xfer = retTargetXfer extbl istrm
+          let xfer = returnTargetXfer exceptionTable stream
            in case doFlow xfer M.empty [(Just firstPC, [])] [] of
                 [] -> error "Internal: dataflow analysis yielded no targets for ret"
                 bs -> Just $ map snd bs
@@ -355,34 +351,32 @@ doFlow xfer seen (curr:rem) !acc =
 -- We represent the dataflow state before execution of an instruction at PC 'p'
 -- by (Just p, L), where L is a relation between local variable indices and
 -- return address values.  States of the form (Nothing, _) denote termination.
-type BrTargetState = (Maybe PC, [(LocalVariableIndex, PC)])
+type BranchTargetState = (Maybe PC, [(LocalVariableIndex, PC)])
 
-retTargetXfer :: ExceptionTable -> InstructionStream -> XferF BrTargetState [(PC, PC)]
-retTargetXfer _ _ acc (Nothing, _) = (acc, [])
-retTargetXfer extbl istrm acc (Just pc, localr) = xfer (lkup pc)
+returnTargetXfer :: ExceptionTable -> InstructionStream -> XferF BranchTargetState [(PC, PC)]
+returnTargetXfer _ _ acc (Nothing, _) = (acc, [])
+returnTargetXfer exceptionTable stream acc (Just pc, localVars) = xfer (lookupStream pc)
   where
-    succPC = safeNextPcPrim istrm
-    ssuccPC = fromMaybe (error "btx: invalid succPC") . succPC
-    lkup p = fromMaybe (error $ "btx: Invalid inst @ " ++ show p) (istrm ! p)
+    succPC = safeNextPcPrim stream
+    ssuccPC = fromMaybe (error "returnTargetXfer: invalid succPC") . succPC
+    lookupStream p = fromMaybe (error $ "returnTargetXfer: Invalid inst @ " ++ show p) (stream ! p)
     --
     xfer (Jsr label) =
-      case lkup label
-      -- inst(p) = jsr(label) && inst(label) = astore i
-            of
-        Astore i -> (acc, [(succPC label, (i, ssuccPC pc) : localr)])
+      case lookupStream label of
+        Astore i -> (acc, [(succPC label, (i, ssuccPC pc) : localVars)])
                   -- next state: the call of the referent subroutine (after
                   -- its astore leader) with the successor of the jsr stored
                   -- into the local specified by the astore
-        _        -> error "btx: Assumed jsr targets are always Astore"
+        _ -> error "returnTargetXfer: Assumed jsr targets are always Astore"
     --
     xfer (Ret k) =
-      case lookup k localr of
-        Just q  -> ((pc, q) : acc, [(Just q, localr \\ [(k, q)])])
+      case lookup k localVars of
+        Just q  -> ((pc, q) : acc, [(Just q, localVars \\ [(k, q)])])
                  -- inst(p) = ret k && L(k) = q; this is where we detect that
                  -- this ret instruction branches to q along the control flow
                  -- path we've been following.  Record this fact in 'acc' and
                  -- then follow the jump back to the jsr succ.
-        Nothing -> error $ "btx: No retaddr at lidx " ++ show k
+        Nothing -> error $ "returnTargetXfer: No retaddr at lidx " ++ show k
     --
     xfer inst
       | canThrowException inst
@@ -391,130 +385,99 @@ retTargetXfer extbl istrm acc (Just pc, localr) = xfer (lkup pc)
         -- /may/ fire upon execution of the current instruction
        =
         ( acc
-        , let getHndlrPC (ExceptionTableEntry _ _ h _) = h
-              ts = map ((, localr) . Just . getHndlrPC) . filter (ehCoversPC pc) $ extbl
+        , let getHandlerPC (ExceptionTableEntry _ _ h _) = h
+              ts = map ((, localVars) . Just . getHandlerPC) . filter (exceptionCoversPC pc) $ exceptionTable
            in if breaksControlFlow inst
                 then ts -- terminate this cfp, but still evaluate exception cfps
-                else (succPC pc, localr) : ts -- next inst + exception cfps
+                else (succPC pc, localVars) : ts -- next inst + exception cfps
          )
     --
-    xfer _ = (acc, [(succPC pc, localr)]) -- continue
+    xfer _ = (acc, [(succPC pc, localVars)]) -- continue
 
 --------------------------------------------------------------------------------
 -- Utility functions
 leaderPC :: BasicBlock -> PC
-leaderPC BB {bbInsts = []} = error "internal: leaderPC on empty BB"
-leaderPC bb                = fst . head . bbInsts $ bb
+leaderPC BasicBlock {basicBlockInstrs = []} = error "internal: leaderPC on empty BB"
+leaderPC bb = fst . head . basicBlockInstrs $ bb
 
 terminatorPC :: BasicBlock -> PC
-terminatorPC BB {bbInsts = []} = error "internal: terminatorPC on empty BB"
-terminatorPC bb                = fst . last . bbInsts $ bb
+terminatorPC BasicBlock {basicBlockInstrs = []} = error "internal: terminatorPC on empty BB"
+terminatorPC bb = fst . last . basicBlockInstrs $ bb
 
--- | Fetch an instruction from a CFG by position.
+-- | Fetch an instruction from a Control Flow Graph by position.
 cfgInstByPC :: ControlFlowGraph -> PC -> Maybe Instruction
-cfgInstByPC cfg pc = bbByPC cfg pc >>= flip bbInstByPC pc
+cfgInstByPC cfg pc = basicBlockByPC cfg pc >>= flip basicBlockInstByPC pc
 
-bbInstByPC :: BasicBlock -> PC -> Maybe Instruction
-bbInstByPC bb pc = lookup pc (bbInsts bb)
+basicBlockInstByPC :: BasicBlock -> PC -> Maybe Instruction
+basicBlockInstByPC bb pc = lookup pc (basicBlockInstrs bb)
 
-bbInterval :: BasicBlock -> Interval PC
-bbInterval bb = Interval (leaderPC bb) (terminatorPC bb)
+basicBlockInterval :: BasicBlock -> Interval PC
+basicBlockInterval bb = Interval (leaderPC bb) (terminatorPC bb)
 
-bbPCs :: BasicBlock -> [PC]
-bbPCs = map fst . bbInsts
+basicBlockPCs :: BasicBlock -> [PC]
+basicBlockPCs = map fst . basicBlockInstrs
 
-bbSuccPC :: BasicBlock -> PC -> Maybe PC
-bbSuccPC bb pc =
-  case drop 1 $ dropWhile (/= pc) $ map fst $ bbInsts bb of
+basicBlockSuccPC :: BasicBlock -> PC -> Maybe PC
+basicBlockSuccPC bb pc =
+  case drop 1 $ dropWhile (/= pc) $ map fst $ basicBlockInstrs bb of
     []         -> Nothing
     (succPC:_) -> Just succPC
 
-ehCoversPC :: PC -> ExceptionTableEntry -> Bool
-ehCoversPC pc (ExceptionTableEntry s e _ _) = pc >= s && pc <= e
+exceptionCoversPC :: PC -> ExceptionTableEntry -> Bool
+exceptionCoversPC pc (ExceptionTableEntry s e _ _) = pc >= s && pc <= e
 
-ehsForBB :: ExceptionTable -> BasicBlock -> ExceptionTable
-ehsForBB extbl bb = nub $ concatMap (\pc -> filter (ehCoversPC pc) extbl) (bbPCs bb)
+basicBlockExceptions :: ExceptionTable -> BasicBlock -> ExceptionTable
+basicBlockExceptions exceptionTable block =
+  nub $ concatMap (\pc -> filter (exceptionCoversPC pc) exceptionTable) (basicBlockPCs block)
 
-modErr :: String -> a
-modErr msg = error $ "ControlFlowGraph: " ++ msg
+modError :: String -> a
+modError msg = error $ "ControlFlowGraph: " ++ msg
 
 --------------------------------------------------------------------------------
 -- Pretty-printing
 prettyControlFlowGraph :: ControlFlowGraph -> String
 prettyControlFlowGraph cfg = "ControlFlowGraph {\n" ++ showOnNewLines 2 prettifiedBBs ++ "\n}"
   where
-    prettifiedBBs = (map prettyBasicBlock . allBBs) cfg
+    prettifiedBBs = (map prettyBasicBlock . cfgAllBlocks) cfg
 
 prettyBasicBlock :: BasicBlock -> String
-prettyBasicBlock bb = "BasicBlock(" ++ show (bbId bb) ++ "):\n" ++ instString
+prettyBasicBlock bb = "BasicBlock(" ++ show (basicBlockId bb) ++ "):\n" ++ instString
   where
-    instString = showOnNewLines 4 (map (\(pc, inst) -> show pc ++ ": " ++ prettyInstString inst) (bbInsts bb))
+    instString = showOnNewLines 4 (map (\(pc, inst) -> show pc ++ ": " ++ prettyInstString inst) (basicBlockInstrs bb))
 
 prettyInstString :: Instruction -> String
-prettyInstString (Invokevirtual (JavaClassType cn) mk) = "Invokevirtual " ++ prettyMethodKeyString cn mk
-prettyInstString (Invokespecial (JavaClassType cn) mk) = "Invokespecial " ++ prettyMethodKeyString cn mk
-prettyInstString (Invokestatic cn mk) = "Invokestatic " ++ prettyMethodKeyString cn mk
-prettyInstString (Invokeinterface cn mk) = "Invokeinterface " ++ prettyMethodKeyString cn mk
+prettyInstString (Invokevirtual (JavaClassType className) methodId) =
+  "Invokevirtual " ++ prettyMethodIdString className methodId
+prettyInstString (Invokespecial (JavaClassType className) methodId) =
+  "Invokespecial " ++ prettyMethodIdString className methodId
+prettyInstString (Invokestatic className methodId) = "Invokestatic " ++ prettyMethodIdString className methodId
+prettyInstString (Invokeinterface className methodId) = "Invokeinterface " ++ prettyMethodIdString className methodId
 prettyInstString (Getfield fieldId) = "Getfield " ++ prettyFieldId fieldId
 prettyInstString (Putfield fieldId) = "Putfield " ++ prettyFieldId fieldId
-prettyInstString (New cn) = "New " ++ slashesToDots (unpackClassName cn)
+prettyInstString (New className) = "New " ++ slashesToDots (unpackClassName className)
 prettyInstString (Ldc (String s)) = "Ldc (String " ++ "\"" ++ s ++ "\")"
-prettyInstString (Ldc (ClassRef cn)) = "Ldc (ClassRef " ++ slashesToDots (unpackClassName cn) ++ ")"
+prettyInstString (Ldc (ClassRef className)) = "Ldc (ClassRef " ++ slashesToDots (unpackClassName className) ++ ")"
 prettyInstString (Getstatic fieldId) = "Getstatic " ++ prettyFieldId fieldId
 prettyInstString (Putstatic fieldId) = "Putstatic " ++ prettyFieldId fieldId
 prettyInstString i = show i
 
-prettyMethodKeyString :: JavaClassName -> MethodId -> String
-prettyMethodKeyString cn mk = slashesToDots (unpackClassName cn) ++ "." ++ methodIdName mk
+prettyMethodIdString :: JavaClassName -> MethodId -> String
+prettyMethodIdString className methodId = slashesToDots (unpackClassName className) ++ "." ++ methodIdName methodId
 
---------------------------------------------------------------------------------
--- .dot output
--- | Render the CFG of a method into Graphviz .dot format
-cfgToDot ::
-     ExceptionTable
-  -> ControlFlowGraph
-  -> String -- | method name
-  -> String
-cfgToDot extbl cfg methodName =
-  "digraph methodcfg {" ++
-  nl ++
-  "label=\"CFG for method '" ++
-  methodName ++ "'\";" ++ nl ++ intercalate nl (map renderBB (allBBs cfg) ++ map renderEdge (bbSuccs cfg)) ++ "\n}"
-  where
-    nm BBIdEntry = "entry"
-    nm BBIdExit  = "exit"
-    nm (BBId pc) = "BB_" ++ show pc
-    nl = "\n  "
-    qnl = "\\n"
-    renderBB bb =
-      nm (bbId bb) ++
-      " [ shape=record, label=\"{" ++ intercalate qnl (prettyLabel bb : map prettyEntry (bbInsts bb)) ++ "}\" ];"
-    renderEdge (src, snk) = nm src ++ " -> " ++ nm snk ++ ";"
-    prettyEntry (pc, i) = show pc ++ ": " ++ prettyInstString i
-    prettyLabel bb = nm (bbId bb) ++ ": " ++ exhText bb
-    exhText bb =
-      case map snd . filter (p . fst) $ exhLabels of
-        []     -> ""
-        labels -> intercalate ", " labels
-      where
-        p pc = bbId bb /= BBIdEntry && bbId bb /= BBIdExit && leaderPC bb == pc
-    exhLabels =
-      nub $
-      (`concatMap` allBBs cfg) $ \bb ->
-        case ehsForBB extbl bb of
-          [] -> []
-          ehs ->
-            (`map` ehs) $ \eh ->
-              ( handlerPc eh
-              , "(H-" ++ maybe "All" show (catchType eh) ++ ": [" ++ show (startPc eh) ++ "," ++ show (endPc eh) ++ "])")
+prettyBasicBlockId :: BasicBlockId -> Doc
+prettyBasicBlockId bbid =
+  case bbid of
+    BasicBlockIdEntry -> "BB%entry"
+    BasicBlockIdExit  -> "BB%exit"
+    BasicBlockId pc   -> "BB%" <> int (fromIntegral pc)
 
 --------------------------------------------------------------------------------
 -- Instances
 instance Show ControlFlowGraph where
-  show cfg = "ControlFlowGraph { allBBs = " ++ show (allBBs cfg) ++ " }"
+  show cfg = "ControlFlowGraph { allBBs = " ++ show (cfgAllBlocks cfg) ++ " }"
 
 instance Eq ControlFlowGraph where
-  cfg1 == cfg2 = allBBs cfg1 == allBBs cfg2 && bbSuccs cfg1 == bbSuccs cfg2
+  cfg1 == cfg2 = cfgAllBlocks cfg1 == cfgAllBlocks cfg2 && basicBlockSuccs cfg1 == basicBlockSuccs cfg2
 
 instance Eq BasicBlock where
-  bb1 == bb2 = bbId bb1 == bbId bb2
+  bb1 == bb2 = basicBlockId bb1 == basicBlockId bb2
