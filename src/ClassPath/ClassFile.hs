@@ -1,4 +1,4 @@
-module ClassPath.ClassFileParser
+module ClassPath.ClassFile
   -- * Class declarations
   ( JavaClass(..)
   , classMethods

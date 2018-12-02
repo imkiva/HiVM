@@ -33,6 +33,9 @@ dependencies:
 - deepseq
 - directory
 - filepath
+- unordered-containers
+- hashable
+- random
 
 
 ghc-options: -Wall

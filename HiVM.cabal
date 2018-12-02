@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: bff0ef08217d7b32da9ce0a96c144899e0f2abddc8d0746bd60bf60d7b5c004a
+-- hash: 6c745cd79f834a6793845abd96593070aa00a0b194c7a7aa61ba17ce2ee3171d
 
 name:           HiVM
 version:        0.1.0.0
@@ -27,10 +27,12 @@ source-repository head
 
 library
   exposed-modules:
-      ClassPath.ClassFileParser
+      ClassPath.ClassFile
+      ClassPath.ClassLoader
       ClassPath.Common
       ClassPath.ControlFlowGraph
       ClassPath.JarReader
+      Utils.UniqueId
   other-modules:
       Paths_HiVM
   hs-source-dirs:
@@ -48,7 +50,10 @@ library
     , fgl
     , filepath
     , fingertree
+    , hashable
     , pretty
+    , random
+    , unordered-containers
     , zlib
   default-language: Haskell2010
 
@@ -72,7 +77,10 @@ executable HiVM-exe
     , fgl
     , filepath
     , fingertree
+    , hashable
     , pretty
+    , random
+    , unordered-containers
     , zlib
   default-language: Haskell2010
 
@@ -80,6 +88,8 @@ test-suite HiVM-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      ClassPath.ClassFileSpec
+      ClassPath.ClassLoaderSpec
       Paths_HiVM
   hs-source-dirs:
       test
@@ -97,6 +107,9 @@ test-suite HiVM-test
     , fgl
     , filepath
     , fingertree
+    , hashable
     , pretty
+    , random
+    , unordered-containers
     , zlib
   default-language: Haskell2010

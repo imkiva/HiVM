@@ -25,7 +25,7 @@ import qualified Data.ByteString.Lazy       as LBS
 import qualified Data.List                  as L
 import qualified Data.Map                   as M
 
-import           ClassPath.ClassFileParser
+import           ClassPath.ClassFile
 
 -- import Debug.Trace
 -- | Datatype representing a collection of .jar archives.
