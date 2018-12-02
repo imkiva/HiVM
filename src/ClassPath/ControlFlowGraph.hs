@@ -54,12 +54,12 @@ data ControlFlowGraph = ControlFlowGraph
   , cfgNextPC       :: PC -> Maybe PC
   , cfgAllBlocks    :: [BasicBlock]
   , basicBlockSuccs :: [(BasicBlockId, BasicBlockId)]
-  , basicBlockPreds :: BasicBlockId -> [BasicBlockId]
-  , cfgSuccs           :: BasicBlockId -> [BasicBlockId]
-  , cfgGraph           :: Gr BasicBlockId ()
-  , cfgNodeMap         :: NodeMap BasicBlockId
-  , cfgIPdoms          :: M.Map BasicBlockId BasicBlockId
-  , cfgPdoms           :: M.Map BasicBlockId [BasicBlockId]
+  , cfgPreds        :: BasicBlockId -> [BasicBlockId]
+  , cfgSuccs        :: BasicBlockId -> [BasicBlockId]
+  , cfgGraph        :: Gr BasicBlockId ()
+  , cfgNodeMap      :: NodeMap BasicBlockId
+  , cfgIPdoms       :: M.Map BasicBlockId BasicBlockId
+  , cfgPdoms        :: M.Map BasicBlockId [BasicBlockId]
   }
 
 entryBlock, exitBlock :: BasicBlock
@@ -82,7 +82,7 @@ buildControlFlowGraph exceptionTable stream = cfg
                 else case I.search pc finalBlocks of
                        [(_, bb)] -> Just bb
                        [] -> Nothing
-                       _ -> error $ "bbByPC: internal: " ++ "multiple interval match"
+                       _ -> error $ "basicBlockByPC: internal: " ++ "multiple interval match"
         , basicBlockById =
             \case
               BasicBlockId pc -> basicBlockByPC cfg pc
@@ -116,7 +116,7 @@ buildControlFlowGraph exceptionTable stream = cfg
                     map
                       (\bt ->
                          case basicBlockByPC cfg bt of
-                           Nothing -> error "newSuccs: internal: invalid BBId"
+                           Nothing -> error "newSuccs: internal: invalid BasicBlockId"
                            Just sbb -> (basicBlockId bb, basicBlockId sbb))
                       (brTargets $ terminatorPC bb) ++
                     -- Identify a flow edge from bb to x when bb's terminator
@@ -136,15 +136,15 @@ buildControlFlowGraph exceptionTable stream = cfg
                   case newSuccs of
                     [] -> (basicBlockId bb, BasicBlockIdExit) : acc
                     _  -> newSuccs ++ acc
-        , basicBlockPreds =
+        , cfgPreds =
             \bbid ->
               case basicBlockById cfg bbid of
-                Nothing -> error "CFG.preds: invalid BBId"
+                Nothing -> error "basicBlockPreds: invalid BasicBlockId"
                 Just _ -> map fst $ filter ((== bbid) . snd) $ basicBlockSuccs cfg
         , cfgSuccs =
             \bbid ->
               case basicBlockById cfg bbid of
-                Nothing -> error "CFG.succs: invalid BBId"
+                Nothing -> error "cfgSuccs: invalid BasicBlockId"
                 Just _ -> map snd $ filter ((== bbid) . fst) $ basicBlockSuccs cfg
         , cfgGraph = gr
         , cfgNodeMap = nm
@@ -397,11 +397,11 @@ returnTargetXfer exceptionTable stream acc (Just pc, localVars) = xfer (lookupSt
 --------------------------------------------------------------------------------
 -- Utility functions
 leaderPC :: BasicBlock -> PC
-leaderPC BasicBlock {basicBlockInstrs = []} = error "internal: leaderPC on empty BB"
+leaderPC BasicBlock {basicBlockInstrs = []} = error "internal: leaderPC on empty BaiscBlock"
 leaderPC bb = fst . head . basicBlockInstrs $ bb
 
 terminatorPC :: BasicBlock -> PC
-terminatorPC BasicBlock {basicBlockInstrs = []} = error "internal: terminatorPC on empty BB"
+terminatorPC BasicBlock {basicBlockInstrs = []} = error "internal: terminatorPC on empty BaiscBlock"
 terminatorPC bb = fst . last . basicBlockInstrs $ bb
 
 -- | Fetch an instruction from a Control Flow Graph by position.
@@ -474,7 +474,7 @@ prettyBasicBlockId bbid =
 --------------------------------------------------------------------------------
 -- Instances
 instance Show ControlFlowGraph where
-  show cfg = "ControlFlowGraph { allBBs = " ++ show (cfgAllBlocks cfg) ++ " }"
+  show cfg = "ControlFlowGraph { BaiscBlocks = " ++ show (cfgAllBlocks cfg) ++ " }"
 
 instance Eq ControlFlowGraph where
   cfg1 == cfg2 = cfgAllBlocks cfg1 == cfgAllBlocks cfg2 && basicBlockSuccs cfg1 == basicBlockSuccs cfg2
