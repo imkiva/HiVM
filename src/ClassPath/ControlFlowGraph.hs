@@ -172,7 +172,7 @@ buildControlFlowGraph exceptionTable stream = cfg
     --
     isBrInst pc = not . null $ brTargets pc
     isBrTarget pc = pc `elem` concat (M.elems btm)
-    btm = makeBrTargetMap exceptionTable stream
+    btm = makeBranchTargetMap exceptionTable stream
     brTargets pc = fromMaybe [] $ M.lookup pc btm
 
 --  let dot = cfgToDot extbl cfg "???" in
@@ -294,8 +294,8 @@ processInst isLeader isBranchInst firstPC lastPC (pc, inst) bbi =
 --
 -- We do a (fairly sparse) abstract execution of the method, tracking the state
 -- pertaining to jsr/ret pairings along all execution paths.
-makeBrTargetMap :: ExceptionTable -> InstructionStream -> Map PC [PC]
-makeBrTargetMap exceptionTable stream = foldr f M.empty stream'
+makeBranchTargetMap :: ExceptionTable -> InstructionStream -> Map PC [PC]
+makeBranchTargetMap exceptionTable stream = foldr f M.empty stream'
   where
     f (pc, i) acc = maybe acc (\v -> M.insert pc v acc) $ getBranchPCs i
     stream'@((firstPC, _):_) = assocs stream
@@ -326,8 +326,8 @@ makeBrTargetMap exceptionTable stream = foldr f M.empty stream'
            in case doFlow xfer M.empty [(Just firstPC, [])] [] of
                 [] -> error "Internal: dataflow analysis yielded no targets for ret"
                 bs -> Just $ map snd bs
-        Lookupswitch dflt tgts -> Just $ dflt : map snd tgts
-        Tableswitch dflt _ _ tgts -> Just $ dflt : tgts
+        Lookupswitch defaultTag targets -> Just $ defaultTag : map snd targets
+        Tableswitch defaultTag _ _ targets -> Just $ defaultTag : targets
         _ -> Nothing
 
 type XferF state acc = acc -> state -> (acc, [state])
@@ -465,8 +465,8 @@ prettyMethodIdString :: JavaClassName -> MethodId -> String
 prettyMethodIdString className methodId = slashesToDots (unpackClassName className) ++ "." ++ methodIdName methodId
 
 prettyBasicBlockId :: BasicBlockId -> Doc
-prettyBasicBlockId bbid =
-  case bbid of
+prettyBasicBlockId blockId =
+  case blockId of
     BasicBlockIdEntry -> "BB%entry"
     BasicBlockIdExit  -> "BB%exit"
     BasicBlockId pc   -> "BB%" <> int (fromIntegral pc)
