@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTs             #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module ClassPath.Common
+module ClassPath.Base
     -- * Class names
   ( JavaClassName
   , packClassName

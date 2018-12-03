@@ -43,7 +43,7 @@ import           Data.Maybe
 import           Prelude                     hiding (rem, (<>))
 import           Text.PrettyPrint
 
-import           ClassPath.Common
+import           ClassPath.Base
 
 -- import Debug.Trace
 --------------------------------------------------------------------------------

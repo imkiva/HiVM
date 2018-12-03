@@ -36,7 +36,8 @@ dependencies:
 - unordered-containers
 - hashable
 - random
-
+- stm
+- mtl
 
 ghc-options: -Wall
 

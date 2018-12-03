@@ -15,9 +15,9 @@ module ClassPath.ClassLoader
   , unpackClassName
   ) where
 
+import           ClassPath.Base
 import           ClassPath.ClassFile (JavaClass)
 import qualified ClassPath.ClassFile as ClassFile
-import           ClassPath.Common
 import           Data.Hashable
 import           Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
