@@ -16,13 +16,14 @@ module ClassPath.ClassLoader
   ) where
 
 import           ClassPath.Base
-import           ClassPath.ClassFile (JavaClass)
-import qualified ClassPath.ClassFile as ClassFile
+import           ClassPath.ClassFile        (JavaClass)
+import qualified ClassPath.ClassFile        as ClassFile
+import           ClassPath.ClassPathManager
 import           Data.Hashable
-import           Data.HashMap.Strict (HashMap)
-import qualified Data.HashMap.Strict as HashMap
+import           Data.HashMap.Strict        (HashMap)
+import qualified Data.HashMap.Strict        as HashMap
 import           Data.Maybe
-import           Prelude             hiding (id)
+import           Prelude                    hiding (id)
 import           System.IO.Unsafe
 import           Utils.UniqueId
 
@@ -84,9 +85,4 @@ loadClass cl@(ClassLoader clType id classes) name =
             newClassLoader = ClassLoader clType id $ saveClass classes classId newClazz
   where
     classId = ClassId name
-
-searchClassPath :: JavaClassName -> FilePath
-searchClassPath name = ((testClassPath ++) . dotsToSlashes $ unpackClassName name) ++ ".class"
-
-testClassPath :: String
-testClassPath = "/Users/kiva/Documents/CLionProjects/KivaVM/java-out/"
+    searchClassPath = undefined -- placeholder

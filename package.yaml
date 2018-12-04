@@ -38,6 +38,7 @@ dependencies:
 - random
 - stm
 - mtl
+- split
 
 ghc-options: -Wall
 

@@ -73,6 +73,9 @@ module ClassPath.ClassFile
   , ConstantPoolValue(..)
   ) where
 
+import           ClassPath.Base
+import           ClassPath.ControlFlowGraph
+import           ClassPath.Types
 import           Control.Exception          (assert)
 import           Control.Monad
 import           Data.Array                 (listArray, (!))
@@ -88,10 +91,6 @@ import qualified Data.Map                   as Map
 import           Data.Maybe
 import           Prelude                    hiding (read)
 import           System.IO
-
-import           ClassPath.Base
-import           ClassPath.ControlFlowGraph
-import           ClassPath.Types
 
 -- Version of replicate with arguments convoluted for parser.
 replicateN :: (Integral b, Monad m) => m a -> b -> m [a]

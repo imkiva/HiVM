@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: e82b1b7ba135a16814893246d5783b31622db7314517a398e265049f5b935627
+-- hash: 3ce710bf4a0e662689e17a69a8e5c269e7ba57be2a703a5a63a3852cfdb8221f
 
 name:           HiVM
 version:        0.1.0.0
@@ -57,6 +57,7 @@ library
     , mtl
     , pretty
     , random
+    , split
     , stm
     , unordered-containers
     , zlib
@@ -86,6 +87,7 @@ executable HiVM-exe
     , mtl
     , pretty
     , random
+    , split
     , stm
     , unordered-containers
     , zlib
@@ -118,6 +120,7 @@ test-suite HiVM-test
     , mtl
     , pretty
     , random
+    , split
     , stm
     , unordered-containers
     , zlib

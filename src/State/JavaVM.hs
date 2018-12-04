@@ -1,10 +1,11 @@
 module State.JavaVM where
 
-import           ClassPath.ClassFile
+import           ClassPath.Base
+import           ClassPath.Types
 import           Control.Applicative
 import           Control.Concurrent
 import           Control.Concurrent.STM
-import           Control.Monad.Error
+import           Control.Monad.Except
 import           Control.Monad.State
 import           Data.Array             (Array)
 import qualified Data.Array             as Array
@@ -16,7 +17,7 @@ import qualified Data.Map               as Map
 import           Data.Set               (Set)
 import qualified Data.Set               as Set
 
-type JavaVM a = ErrorT String (StateT JavaThread IO) a
+type JavaVM a = ExceptT String (StateT JavaThread IO) a
 
 newtype JavaThread = JavaThread
   { stack :: [JavaFrame]
@@ -25,7 +26,7 @@ newtype JavaThread = JavaThread
 data JavaFrame = JavaFrame
   { frameCurrentClass  :: JavaClass
   , frameSlots         :: IOArray Int JavaType
-  , framePc            :: IORef Int
+  , framePc            :: IORef PC
   , framePointer       :: IORef Int
   , frameCurrentMethod :: JavaMethod
   }
