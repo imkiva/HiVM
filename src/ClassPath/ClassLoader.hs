@@ -19,6 +19,7 @@ import           ClassPath.Base
 import           ClassPath.ClassFile        (JavaClass)
 import qualified ClassPath.ClassFile        as ClassFile
 import           ClassPath.ClassPathManager
+import           Control.Monad.State
 import           Data.Hashable
 import           Data.HashMap.Strict        (HashMap)
 import qualified Data.HashMap.Strict        as HashMap
@@ -73,16 +74,23 @@ makeUserClassLoader :: ClassLoader
 makeUserClassLoader = makeClassLoader UserClassLoader
 
 {-# NOINLINE loadClassUnsafe #-}
-loadClassUnsafe :: FilePath -> JavaClass
-loadClassUnsafe = unsafePerformIO . ClassFile.loadClassFromFile
+loadClassUnsafe :: JavaClassName -> Maybe JavaClass
+loadClassUnsafe javaName =
+  unsafePerformIO $ do
+    maybeFile <- searchClassPath javaName
+    case maybeFile of
+      Just file -> do
+        clazz <- ClassFile.loadClassFromFile file
+        return $ Just clazz
+      Nothing -> return Nothing
 
 loadClass :: ClassLoader -> JavaClassName -> Maybe (ClassLoader, JavaClass)
 loadClass cl@(ClassLoader clType id classes) name =
   case lookupClass classes classId of
     Just clazz -> Just (cl, clazz)
-    Nothing -> Just (newClassLoader, newClazz)
-      where newClazz = loadClassUnsafe (searchClassPath name)
-            newClassLoader = ClassLoader clType id $ saveClass classes classId newClazz
+    Nothing -> do
+      newClazz <- loadClassUnsafe name
+      let newClassLoader = ClassLoader clType id (saveClass classes classId newClazz)
+      return (newClassLoader, newClazz)
   where
     classId = ClassId name
-    searchClassPath = undefined -- placeholder
