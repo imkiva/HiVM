@@ -7,8 +7,8 @@ import           ClassPath.ClassLoader
 
 testClassLoader :: IO ()
 testClassLoader = do
-  let cl = makeBootstrapClassLoader
+  maybeClass <- loadClass makeBootstrapClassLoader (packClassName "com.imkiva.kivm.Main")
   putStrLn $
-    case loadClass cl $ packClassName "com.imkiva.kivm.Main" of
+    case maybeClass of
+      Just (cl, clazz) -> prettyClass clazz ++ "\n\nLoaded with ClassLoader:\n" ++ show cl
       Nothing -> "unable to load class com.imkiva.kivm.Main"
-      Just (newCl, clazz) -> prettyClass clazz ++ "\nLoaded with ClassLoader:\n" ++ show newCl

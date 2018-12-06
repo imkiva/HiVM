@@ -25,7 +25,6 @@ import           Data.HashMap.Strict        (HashMap)
 import qualified Data.HashMap.Strict        as HashMap
 import           Data.Maybe
 import           Prelude                    hiding (id)
-import           System.IO.Unsafe
 import           Utils.UniqueId
 
 newtype ClassId =

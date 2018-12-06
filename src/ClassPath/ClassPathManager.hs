@@ -3,13 +3,10 @@ module ClassPath.ClassPathManager
   ) where
 
 import           ClassPath.Base
-import           Control.Monad
-import qualified Data.HashMap.Strict as HashMap
 import           Data.List.Split
-import qualified System.Directory    as Dir
+import qualified System.Directory   as Dir
 import           System.Environment
-import qualified System.Info         as SystemInfo
-import           System.IO.Unsafe
+import qualified System.Info        as SystemInfo
 
 searchClassPath :: JavaClassName -> IO (Maybe FilePath)
 searchClassPath javaName = do
