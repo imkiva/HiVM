@@ -73,24 +73,24 @@ makeSystemClassLoader = makeClassLoader SystemClassLoader
 makeUserClassLoader :: ClassLoader
 makeUserClassLoader = makeClassLoader UserClassLoader
 
-{-# NOINLINE loadClassUnsafe #-}
-loadClassUnsafe :: JavaClassName -> Maybe JavaClass
-loadClassUnsafe javaName =
-  unsafePerformIO $ do
-    maybeFile <- searchClassPath javaName
-    case maybeFile of
-      Just file -> do
-        clazz <- ClassFile.loadClassFromFile file
-        return $ Just clazz
-      Nothing -> return Nothing
+loadNewClass :: JavaClassName -> IO (Maybe JavaClass)
+loadNewClass javaName = do
+  maybeFile <- searchClassPath javaName
+  case maybeFile of
+    Just file -> do
+      clazz <- ClassFile.loadClassFromFile file
+      return $ Just clazz
+    Nothing -> return Nothing
 
-loadClass :: ClassLoader -> JavaClassName -> Maybe (ClassLoader, JavaClass)
+loadClass :: ClassLoader -> JavaClassName -> IO (Maybe (ClassLoader, JavaClass))
 loadClass cl@(ClassLoader clType id classes) name =
   case lookupClass classes classId of
-    Just clazz -> Just (cl, clazz)
+    Just clazz -> return $ Just (cl, clazz)
     Nothing -> do
-      newClazz <- loadClassUnsafe name
-      let newClassLoader = ClassLoader clType id (saveClass classes classId newClazz)
-      return (newClassLoader, newClazz)
+      newClazz <- loadNewClass name
+      return $ do
+        clazz <- newClazz
+        let newClassLoader = ClassLoader clType id (saveClass classes classId clazz)
+        return (newClassLoader, clazz)
   where
     classId = ClassId name
