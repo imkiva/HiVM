@@ -3,7 +3,7 @@ module ClassPath.ClassPathManager
   ) where
 
 import           ClassPath.Base
-import           Data.List.Split
+import qualified Data.List.Split    as Split
 import qualified System.Directory   as Dir
 import           System.Environment
 import qualified System.Info        as SystemInfo
@@ -20,7 +20,7 @@ searchClassInPath javaName (p:ps) = do
     then return $ Right possible
     else searchClassInPath javaName ps
   where
-    possible = makeClassFileName p javaName
+    possible = makeClassFileName (p ++ "/") javaName -- TODO: replace hardcoded "/"
 searchClassInPath javaName [] = return $ Left ("Class " ++ unpackClassName javaName ++ " not found in classpath")
 
 makeClassFileName :: String -> JavaClassName -> String
@@ -36,5 +36,5 @@ getClassPathEnv :: IO [FilePath]
 getClassPathEnv = do
   env <- getEnvironment
   case lookup "CLASSPATH" env of
-    Just classPath -> return $ splitOn getEnvSeparator classPath
+    Just classPath -> return $ Split.splitOn getEnvSeparator classPath
     _              -> return []
