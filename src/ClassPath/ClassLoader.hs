@@ -72,19 +72,19 @@ makeSystemClassLoader = makeClassLoader SystemClassLoader
 makeUserClassLoader :: ClassLoader
 makeUserClassLoader = makeClassLoader UserClassLoader
 
-loadNewClass :: JavaClassName -> IO (Maybe JavaClass)
+loadNewClass :: JavaClassName -> IO (Either String JavaClass)
 loadNewClass javaName = do
   maybeFile <- searchClassPath javaName
   case maybeFile of
-    Just file -> do
+    Right file -> do
       clazz <- ClassFile.loadClassFromFile file
-      return $ Just clazz
-    Nothing -> return Nothing
+      return $ Right clazz
+    Left err -> return $ Left err
 
-loadClass :: ClassLoader -> JavaClassName -> IO (Maybe (ClassLoader, JavaClass))
+loadClass :: ClassLoader -> JavaClassName -> IO (Either String (ClassLoader, JavaClass))
 loadClass cl@(ClassLoader clType id classes) name =
   case lookupClass classes classId of
-    Just clazz -> return $ Just (cl, clazz)
+    Just clazz -> return $ Right (cl, clazz)
     Nothing -> do
       newClazz <- loadNewClass name
       return $ do

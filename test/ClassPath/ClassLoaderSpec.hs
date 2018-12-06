@@ -7,8 +7,8 @@ import           ClassPath.ClassLoader
 
 testClassLoader :: IO ()
 testClassLoader = do
-  maybeClass <- loadClass makeBootstrapClassLoader (packClassName "com.imkiva.kivm.Main")
+  result <- loadClass makeBootstrapClassLoader (packClassName "com.imkiva.kivm.Main")
   putStrLn $
-    case maybeClass of
-      Just (cl, clazz) -> prettyClass clazz ++ "\n\nLoaded with ClassLoader:\n" ++ show cl
-      Nothing -> "unable to load class com.imkiva.kivm.Main"
+    case result of
+      Right (cl, clazz) -> prettyClass clazz ++ "\n\nLoaded with ClassLoader:\n" ++ show cl
+      Left err -> "unable to load class com.imkiva.kivm.Main: " ++ err

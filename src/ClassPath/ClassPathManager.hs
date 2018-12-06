@@ -8,20 +8,20 @@ import qualified System.Directory   as Dir
 import           System.Environment
 import qualified System.Info        as SystemInfo
 
-searchClassPath :: JavaClassName -> IO (Maybe FilePath)
+searchClassPath :: JavaClassName -> IO (Either String FilePath)
 searchClassPath javaName = do
   classPathList <- getClassPathEnv
   searchClassInPath javaName classPathList
 
-searchClassInPath :: JavaClassName -> [FilePath] -> IO (Maybe FilePath)
+searchClassInPath :: JavaClassName -> [FilePath] -> IO (Either String FilePath)
 searchClassInPath javaName (p:ps) = do
   res <- Dir.doesFileExist possible
   if res
-    then return $ Just possible
+    then return $ Right possible
     else searchClassInPath javaName ps
   where
     possible = makeClassFileName p javaName
-searchClassInPath _ [] = return Nothing
+searchClassInPath javaName [] = return $ Left ("Class " ++ unpackClassName javaName ++ " not found in classpath")
 
 makeClassFileName :: String -> JavaClassName -> String
 makeClassFileName classPath = (++ ".class") . (classPath ++) . dotsToSlashes . unpackClassName
