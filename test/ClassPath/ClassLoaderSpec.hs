@@ -22,7 +22,7 @@ testClassLoader = do
 
 loadTestClasses :: StateT ClassLoader IO ()
 loadTestClasses = do
-  let name = packClassName "io.imkiva.kivm.Main"
+  let name = packClassName "com.imkiva.kivm.Main"
   result <- loadClassM name
   cl <- get
   liftIO $ printResult name cl result
