@@ -9,6 +9,7 @@ module ClassPath.ClassLoader
   , saveClass
   , removeClass
   , loadClass
+  , loadClassM
   , JavaClassName
   , JavaClass
   , packClassName
@@ -93,3 +94,13 @@ loadClass cl@(ClassLoader clType id classes) name =
         return (newClassLoader, clazz)
   where
     classId = ClassId name
+
+loadClassM :: JavaClassName -> StateT ClassLoader IO (Either String JavaClass)
+loadClassM javaName = do
+  cl <- get
+  result <- liftIO =<< loadClass cl <$> return javaName
+  case result of
+    Right (newCl, clazz) -> do
+      put newCl
+      return $ Right clazz
+    Left err -> return $ Left err
