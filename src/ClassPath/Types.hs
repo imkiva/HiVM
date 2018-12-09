@@ -7,10 +7,13 @@ import           ClassPath.Base
 import           ClassPath.ControlFlowGraph
 import           Data.Array
 import qualified Data.ByteString            as B
+import           Data.Hashable
+import qualified Data.HashMap.Strict        as HashMap
 import           Data.Int
 import           Data.Map                   (Map)
 import           Data.Word
 import           Prelude                    hiding ((<>))
+import qualified Utils.UniqueId             as UniqueId
 
 ----------------------------------------------------------------------
 -- Visibility
@@ -158,3 +161,29 @@ data ConstantPoolInfo
 type ConstantPoolIndex = Word16
 
 type ConstantPool = Array ConstantPoolIndex ConstantPoolInfo
+
+----------------------------------------------------------------------
+-- ClassLoader
+type ClassDictionary = HashMap.HashMap ClassId JavaClass
+
+newtype ClassId =
+  ClassId JavaClassName
+  deriving (Eq, Ord, Show)
+
+data ClassLoaderType
+  = BootstrapClassLoader
+  | SystemClassLoader
+  | UserClassLoader
+  deriving (Eq, Ord, Show)
+
+data ClassLoader = ClassLoader
+  { getLoaderType    :: ClassLoaderType
+  , getLoaderId      :: UniqueId.UniqueId
+  , getLoadedClasses :: ClassDictionary
+  } deriving (Show)
+
+instance Eq ClassLoader where
+  (ClassLoader typeL idL _) == (ClassLoader typeR idR _) = typeL == typeR && idL == idR
+
+instance Hashable ClassId where
+  hashWithSalt salt (ClassId name) = hashWithSalt salt (unpackClassName name)
