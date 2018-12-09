@@ -84,8 +84,8 @@ loadClassM javaName = do
       return $ Right clazz
     Left err -> return $ Left err
 
-shouldUseLoaderType :: JavaClassName -> ClassLoaderType
-shouldUseLoaderType javaName
+detectLoader :: JavaClassName -> ClassLoaderType
+detectLoader javaName
   | "java.ext" `isPrefixOf` name = SystemClassLoader
   | "java." `isPrefixOf` name = BootstrapClassLoader
   | otherwise = AppClassLoader
@@ -94,8 +94,8 @@ shouldUseLoaderType javaName
 
 loadClassJ :: JavaClassName -> JavaContext JavaClass
 loadClassJ javaName = do
-  vm <- getJavaVM =<< get
-  let loaderType = shouldUseLoaderType javaName
+  vm <- getJavaVMM
+  let loaderType = detectLoader javaName
   let cl = getClassLoaderJ loaderType vm
   result <- liftIO =<< loadClass cl <$> return javaName
   case result of
