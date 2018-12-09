@@ -3,13 +3,14 @@ module ClassPath.ClassLoader
   , ClassLoader(..)
   , ClassId(..)
   , makeBootstrapClassLoader
-  , makeUserClassLoader
+  , makeAppClassLoader
   , makeSystemClassLoader
   , lookupClass
   , saveClass
   , removeClass
   , loadClass
   , loadClassM
+  , loadClassJ
   , JavaClassName
   , JavaClass
   , packClassName
@@ -21,10 +22,13 @@ import           ClassPath.ClassFile        (JavaClass)
 import qualified ClassPath.ClassFile        as ClassFile
 import           ClassPath.ClassPathManager
 import           ClassPath.Types
+import           Control.Monad.Except
 import           Control.Monad.State
 import qualified Data.HashMap.Strict        as HashMap
+import           Data.List
 import           Data.Maybe
 import           Prelude                    hiding (id)
+import           State.JavaVM
 import           Utils.UniqueId
 
 lookupClass :: ClassDictionary -> ClassId -> Maybe JavaClass
@@ -45,8 +49,8 @@ makeBootstrapClassLoader = makeClassLoader BootstrapClassLoader
 makeSystemClassLoader :: ClassLoader
 makeSystemClassLoader = makeClassLoader SystemClassLoader
 
-makeUserClassLoader :: ClassLoader
-makeUserClassLoader = makeClassLoader UserClassLoader
+makeAppClassLoader :: ClassLoader
+makeAppClassLoader = makeClassLoader AppClassLoader
 
 loadNewClass :: JavaClassName -> IO (Either String JavaClass)
 loadNewClass javaName = do
@@ -79,3 +83,23 @@ loadClassM javaName = do
       put newCl
       return $ Right clazz
     Left err -> return $ Left err
+
+shouldUseLoaderType :: JavaClassName -> ClassLoaderType
+shouldUseLoaderType javaName
+  | "java.ext" `isPrefixOf` name = SystemClassLoader
+  | "java." `isPrefixOf` name = BootstrapClassLoader
+  | otherwise = AppClassLoader
+  where
+    name = unpackClassName javaName
+
+loadClassJ :: JavaClassName -> JavaContext JavaClass
+loadClassJ javaName = do
+  vm <- getJavaVM =<< get
+  let loaderType = shouldUseLoaderType javaName
+  let cl = getClassLoaderJ loaderType vm
+  result <- liftIO =<< loadClass cl <$> return javaName
+  case result of
+    Right (newCl, clazz) -> do
+      setClassLoaderM loaderType newCl
+      return clazz
+    Left err -> throwError err

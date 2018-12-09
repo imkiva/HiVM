@@ -173,7 +173,7 @@ newtype ClassId =
 data ClassLoaderType
   = BootstrapClassLoader
   | SystemClassLoader
-  | UserClassLoader
+  | AppClassLoader
   deriving (Eq, Ord, Show)
 
 data ClassLoader = ClassLoader
