@@ -6,6 +6,7 @@ module ClassPath.ClassLoaderSpec
 import           ClassPath.ClassFile
 import           ClassPath.ClassLoader
 import           Control.Monad.State
+import           State.JavaVM
 
 printResult :: JavaClassName -> ClassLoader -> Either String JavaClass -> IO ()
 printResult _ cl (Right clazz) = putStrLn $ prettyClass clazz ++ "\n\nLoaded with ClassLoader:\n" ++ show cl
@@ -31,3 +32,6 @@ testClassLoaderMonad :: IO ()
 testClassLoaderMonad = do
   _ <- runStateT loadTestClasses makeBootstrapClassLoader
   return ()
+
+loadClassUsingJavaContext :: JavaContext JavaClass
+loadClassUsingJavaContext = undefined
