@@ -86,7 +86,7 @@ loadClassM javaName = do
 
 detectLoader :: JavaClassName -> ClassLoaderType
 detectLoader javaName
-  | "java.ext" `isPrefixOf` name = SystemClassLoader
+  | any (`isPrefixOf` name) ["javax.", "sun.", "java.ext."] = SystemClassLoader
   | "java." `isPrefixOf` name = BootstrapClassLoader
   | otherwise = AppClassLoader
   where
