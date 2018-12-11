@@ -1,6 +1,9 @@
 module State.JavaEntrance where
 
-import State.JavaVM
+import           Control.Monad.Except
+import           Control.Monad.State
+import           State.JavaVM
 
-runJava :: JavaContext ()
-runJava = undefined
+runJava :: JavaInitArgs -> IO Int
+runJava initArgs = do
+  return 0

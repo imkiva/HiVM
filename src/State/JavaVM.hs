@@ -33,6 +33,13 @@ data JavaFrame = JavaFrame
   , getFrameCurrentMethod :: JavaMethod
   }
 
+data JavaInitArgs = JavaInitArgs
+  { javaClassPath :: String
+  , javaOptions   :: [(String, String)]
+  , initMainClass :: JavaClassName
+  , initMainArgs  :: [String]
+  }
+
 instance Eq JavaFrame where
   (JavaFrame _ d1 p1 t1 m1) == (JavaFrame _ d2 p2 t2 m2) = d1 == d2 && p1 == p2 && t1 == t2 && m1 == m2
 
