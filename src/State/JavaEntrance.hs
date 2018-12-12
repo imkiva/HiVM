@@ -1,5 +1,7 @@
 module State.JavaEntrance
   ( runJava
+  , createJavaVM
+  , createThread
   ) where
 
 import           ClassPath.ClassLoader
