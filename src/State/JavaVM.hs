@@ -126,5 +126,10 @@ setClassLoaderM loaderType cl = do
   currentVM <- getJavaVMM
   let newVM = setClassLoaderJ loaderType currentVM cl
   currentThread <- get
-  let newThread = JavaThread (getThreadId currentThread) (getThreadStack currentThread) (return newVM)
+  let newThread =
+        JavaThread
+          (getThreadId currentThread)
+          (getThreadStack currentThread)
+          (getThreadEnv currentThread)
+          (return newVM)
   put newThread
