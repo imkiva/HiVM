@@ -9,6 +9,7 @@ import           Control.Concurrent.STM
 import           Control.Exception
 import           Control.Monad.Except
 import           Control.Monad.State
+import qualified Data.Array             as A
 import           Data.Array.IO
 import           Data.IORef
 import           Data.List              (foldl')
@@ -109,6 +110,39 @@ putStack st = get >>= (\e -> put $ e {getThreadStack = st})
 
 getTopFrame :: JavaContext JavaFrame
 getTopFrame = getStack >>= (\(f:_) -> return f)
+
+popFrame :: JavaContext ()
+popFrame = getStack >>= (\(_:st) -> putStack st)
+
+readFrame :: Int -> JavaContext JavaType
+readFrame i = getTopFrame >>= (liftIO . flip readArray i . getFrameSlots)
+
+writeFrame :: Int -> JavaType -> JavaContext ()
+writeFrame i o = getTopFrame >>= (\top -> liftIO $ writeArray (getFrameSlots top) i o)
+
+getPC :: JavaContext PC
+getPC = getTopFrame >>= (liftIO . readIORef . getFramePc)
+
+putPC :: PC -> JavaContext ()
+putPC fpc = getTopFrame >>= (liftIO . flip writeIORef fpc . getFramePc)
+
+increasePC :: PC -> JavaContext ()
+increasePC n = getPC >>= (\fpc -> putPC $ fpc + n)
+
+getFP :: JavaContext Int
+getFP = getTopFrame >>= (liftIO . readIORef . getFramePointer)
+
+putFP :: Int -> JavaContext ()
+putFP ffp = getTopFrame >>= (liftIO . flip writeIORef ffp . getFramePointer)
+
+increaseFP :: Int -> JavaContext ()
+increaseFP n = getFP >>= (\fp -> putFP $ fp + n)
+
+pushOperand :: JavaType -> JavaContext ()
+pushOperand o = getFP >>= (`writeFrame` o) >> increaseFP 1
+
+popOperand :: JavaContext JavaType
+popOperand = increaseFP (-1) >> getFP >>= readFrame
 
 getClassLoaderJ :: ClassLoaderType -> JavaVM -> ClassLoader
 getClassLoaderJ BootstrapClassLoader = getBootstrapClassLoader
