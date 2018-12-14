@@ -16,7 +16,9 @@ import qualified Data.Map               as M
 import           Data.Typeable
 import           Utils.UniqueId
 
-type JavaContext a = ExceptT JavaException (StateT JavaThread IO) a
+type ErrorMessage = String
+
+type JavaContext a = ExceptT ErrorMessage (StateT JavaThread IO) a
 
 data JavaVM = JavaVM
   { getBootstrapClassLoader :: ClassLoader
