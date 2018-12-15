@@ -9,7 +9,6 @@ import           Control.Concurrent.STM
 import           Control.Exception
 import           Control.Monad.Except
 import           Control.Monad.State
-import qualified Data.Array             as A
 import           Data.Array.IO
 import           Data.IORef
 import           Data.List              (foldl')
@@ -22,10 +21,8 @@ type ErrorMessage = String
 type JavaContext a = ExceptT ErrorMessage (StateT JavaThread IO) a
 
 data JavaVM = JavaVM
-  { getBootstrapClassLoader :: ClassLoader
-  , getSystemClassLoader    :: ClassLoader
-  , getAppClassLoader       :: ClassLoader
-  , getJavaThreads          :: [JavaThread]
+  { getVmClassLoader :: ClassLoader
+  , getJavaThreads   :: [JavaThread]
   }
 
 data JavaThread = JavaThread
@@ -91,7 +88,7 @@ instance Eq JavaThread where
   thread1 == thread2 = getThreadId thread1 == getThreadId thread2
 
 instance Eq JavaOop where
-  oop1 == oop2 = undefined
+  _ == _ = error "// TODO instance Eq JavaOop"
 
 instance Show JavaThread where
   show thread = "JavaThread #" ++ show (getThreadId thread)
@@ -144,23 +141,16 @@ pushOperand o = getFP >>= (`writeFrame` o) >> increaseFP 1
 popOperand :: JavaContext JavaType
 popOperand = increaseFP (-1) >> getFP >>= readFrame
 
-getClassLoaderJ :: ClassLoaderType -> JavaVM -> ClassLoader
-getClassLoaderJ BootstrapClassLoader = getBootstrapClassLoader
-getClassLoaderJ SystemClassLoader    = getSystemClassLoader
-getClassLoaderJ AppClassLoader       = getAppClassLoader
-
-setClassLoaderJ :: ClassLoaderType -> JavaVM -> ClassLoader -> JavaVM
-setClassLoaderJ BootstrapClassLoader (JavaVM _ sc ac ts) cl = JavaVM cl sc ac ts
-setClassLoaderJ SystemClassLoader (JavaVM bc _ ac ts) cl = JavaVM bc cl ac ts
-setClassLoaderJ AppClassLoader (JavaVM bc sc _ ts) cl = JavaVM bc sc cl ts
+setVmClassLoader :: JavaVM -> ClassLoader -> JavaVM
+setVmClassLoader vm cl = vm {getVmClassLoader = cl}
 
 getJavaVMM :: JavaContext JavaVM
 getJavaVMM = getJavaVM =<< get
 
-setClassLoaderM :: ClassLoaderType -> ClassLoader -> JavaContext ()
-setClassLoaderM loaderType cl = do
+setClassLoaderM :: ClassLoader -> JavaContext ()
+setClassLoaderM cl = do
   currentVM <- getJavaVMM
-  let newVM = setClassLoaderJ loaderType currentVM cl
+  let newVM = setVmClassLoader currentVM cl
   currentThread <- get
   let newThread =
         JavaThread

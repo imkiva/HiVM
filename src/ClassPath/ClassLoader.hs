@@ -2,9 +2,7 @@ module ClassPath.ClassLoader
   ( ClassDictionary
   , ClassLoader(..)
   , ClassId(..)
-  , makeBootstrapClassLoader
-  , makeAppClassLoader
-  , makeSystemClassLoader
+  , makeClassLoader
   , lookupClass
   , saveClass
   , removeClass
@@ -25,7 +23,6 @@ import           ClassPath.Types
 import           Control.Monad.Except
 import           Control.Monad.State
 import qualified Data.HashMap.Strict        as HashMap
-import           Data.List
 import           Data.Maybe
 import           Prelude                    hiding (id)
 import           State.JavaVM
@@ -40,17 +37,8 @@ saveClass dict classId javaClass = HashMap.insert classId javaClass dict
 removeClass :: ClassDictionary -> ClassId -> ClassDictionary
 removeClass dict classId = HashMap.delete classId dict
 
-makeClassLoader :: ClassLoaderType -> ClassLoader
-makeClassLoader loaderType = ClassLoader loaderType makeUniqueId HashMap.empty
-
-makeBootstrapClassLoader :: ClassLoader
-makeBootstrapClassLoader = makeClassLoader BootstrapClassLoader
-
-makeSystemClassLoader :: ClassLoader
-makeSystemClassLoader = makeClassLoader SystemClassLoader
-
-makeAppClassLoader :: ClassLoader
-makeAppClassLoader = makeClassLoader AppClassLoader
+makeClassLoader :: ClassLoader
+makeClassLoader = ClassLoader makeUniqueId HashMap.empty
 
 loadNewClass :: JavaClassName -> IO (Either String JavaClass)
 loadNewClass javaName = do
@@ -62,14 +50,14 @@ loadNewClass javaName = do
     Left err -> return $ Left err
 
 loadClass :: ClassLoader -> JavaClassName -> IO (Either String (ClassLoader, JavaClass))
-loadClass cl@(ClassLoader clType id classes) name =
+loadClass cl@(ClassLoader id classes) name =
   case lookupClass classes classId of
     Just clazz -> return $ Right (cl, clazz)
     Nothing -> do
       newClazz <- loadNewClass name
       return $ do
         clazz <- newClazz
-        let newClassLoader = ClassLoader clType id (saveClass classes classId clazz)
+        let newClassLoader = ClassLoader id (saveClass classes classId clazz)
         return (newClassLoader, clazz)
   where
     classId = ClassId name
@@ -84,22 +72,13 @@ loadClassM javaName = do
       return $ Right clazz
     Left err -> return $ Left err
 
-detectLoader :: JavaClassName -> ClassLoaderType
-detectLoader javaName
-  | any (`isPrefixOf` name) ["javax.", "sun.", "java.ext."] = SystemClassLoader
-  | "java." `isPrefixOf` name = BootstrapClassLoader
-  | otherwise = AppClassLoader
-  where
-    name = unpackClassName javaName
-
 loadClassJ :: JavaClassName -> JavaContext JavaClass
 loadClassJ javaName = do
   vm <- getJavaVMM
-  let loaderType = detectLoader javaName
-  let cl = getClassLoaderJ loaderType vm
+  let cl = getVmClassLoader vm
   result <- liftIO =<< loadClass cl <$> return javaName
   case result of
     Right (newCl, clazz) -> do
-      setClassLoaderM loaderType newCl
+      setClassLoaderM newCl
       return clazz
     Left err -> throwError err

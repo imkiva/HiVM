@@ -170,20 +170,13 @@ newtype ClassId =
   ClassId JavaClassName
   deriving (Eq, Ord, Show)
 
-data ClassLoaderType
-  = BootstrapClassLoader
-  | SystemClassLoader
-  | AppClassLoader
-  deriving (Eq, Ord, Show)
-
 data ClassLoader = ClassLoader
-  { getLoaderType    :: ClassLoaderType
-  , getLoaderId      :: UniqueId.UniqueId
+  { getLoaderId      :: UniqueId.UniqueId
   , getLoadedClasses :: ClassDictionary
   } deriving (Show)
 
 instance Eq ClassLoader where
-  (ClassLoader typeL idL _) == (ClassLoader typeR idR _) = typeL == typeR && idL == idR
+  (ClassLoader idL _) == (ClassLoader idR _) = idL == idR
 
 instance Hashable ClassId where
   hashWithSalt salt (ClassId name) = hashWithSalt salt (unpackClassName name)
