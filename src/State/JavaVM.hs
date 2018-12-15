@@ -93,6 +93,7 @@ instance Eq JavaOop where
 instance Show JavaThread where
   show thread = "JavaThread #" ++ show (getThreadId thread)
 
+----------------------------------------------------------------------
 getJavaEnvRef :: JavaContext (TVar JavaEnv)
 getJavaEnvRef = gets getThreadEnv
 
@@ -141,6 +142,13 @@ pushOperand o = getFP >>= (`writeFrame` o) >> increaseFP 1
 popOperand :: JavaContext JavaType
 popOperand = increaseFP (-1) >> getFP >>= readFrame
 
+getCurrentClass :: JavaContext JavaClass
+getCurrentClass = getFrameCurrentClass <$> getTopFrame
+
+getCurrentMethod :: JavaContext JavaMethod
+getCurrentMethod = getFrameCurrentMethod <$> getTopFrame
+
+----------------------------------------------------------------------
 setVmClassLoader :: JavaVM -> ClassLoader -> JavaVM
 setVmClassLoader vm cl = vm {getVmClassLoader = cl}
 
