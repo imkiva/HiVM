@@ -211,7 +211,8 @@ type PC = Word16
 -- istore_*, lstore_*, fstore_*, dstore_*, astore_* merged with 'Istore', 'Lstore', etc.
 -- ldc, ldc_w, and ldc2_w are merged into generalized 'Ldc'
 data Instruction
-  = Aaload -- | Load reference from array
+  = InstructionError -- | Unknown instruction
+  | Aaload -- | Load reference from array
   | Aastore -- | Store into reference array
   | AconstNull -- | Push null
   | Aload LocalVariableIndex -- | Load reference from local variable

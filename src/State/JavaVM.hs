@@ -14,8 +14,8 @@ import           Data.Array.IO
 import           Data.IORef
 import           Data.List                  (foldl')
 import qualified Data.Map                   as M
+import           Data.Maybe
 import           Data.Typeable
-import           Utils.UniqueId
 
 type ErrorMessage = String
 
@@ -157,6 +157,11 @@ getCurrentMethodAttribute attrName = do
   attrs <- methodAttributes <$> getCurrentMethod
   let Just attr = M.lookup attrName attrs
   return attr
+
+getInstruction :: JavaContext Instruction
+getInstruction = do
+  maybeCode <- cfgInstByPC <$> getCurrentCodeInfo <*> getPC
+  return $ fromMaybe InstructionError maybeCode
 
 ----------------------------------------------------------------------
 setVmClassLoader :: JavaVM -> ClassLoader -> JavaVM
