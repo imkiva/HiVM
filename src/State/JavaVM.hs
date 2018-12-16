@@ -27,7 +27,7 @@ data JavaVM = JavaVM
   }
 
 data JavaThread = JavaThread
-  { getThreadId    :: UniqueId
+  { getThreadId    :: ThreadId
   , getThreadStack :: [JavaFrame]
   , getThreadEnv   :: TVar JavaEnv
   , getJavaVM      :: JavaContext JavaVM
