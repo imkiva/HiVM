@@ -76,6 +76,7 @@ module ClassPath.ClassFile
 import           ClassPath.Base
 import           ClassPath.ControlFlowGraph
 import           ClassPath.Types
+import           Control.Applicative
 import           Control.Exception          (assert)
 import           Control.Monad
 import           Data.Array                 (listArray, (!))
@@ -95,6 +96,10 @@ import           System.IO
 -- Version of replicate with arguments convoluted for parser.
 replicateN :: (Integral b, Monad m) => m a -> b -> m [a]
 replicateN fn i = replicateM (fromIntegral i) fn
+
+-- Convert [Attribute] to Map String Attribute
+toAttrList :: [Attribute] -> Map.Map String Attribute
+toAttrList as = Map.fromList (map (\a -> (attributeName a, a)) as)
 
 ----------------------------------------------------------------------
 -- Type
@@ -661,7 +666,7 @@ getField cp = do
          [bytes] -> Just $ poolUtf8 cp $ runGet getWord16be bytes
          []      -> Nothing
          _       -> error "internal: unexpected signature form")
-      userAttrs
+      (toAttrList userAttrs)
 
 ----------------------------------------------------------------------
 -- Exception table
@@ -745,7 +750,7 @@ getCode cp = do
       exceptionTable
       (parseLineNumberTable lineNumberTables)
       (parseLocalVariableTable cp localVariableTables)
-      userAttrs
+      (toAttrList userAttrs)
 
 ----------------------------------------------------------------------
 getExceptions :: ConstantPool -> Get [JavaType]
@@ -791,7 +796,7 @@ getMethod cp = do
            [bytes] -> Just (runGet (getExceptions cp) bytes)
            []      -> Nothing
            _       -> error "internal: unexpected expectionsVal form")
-        userAttrs
+        (toAttrList userAttrs)
 
 methodIsNative :: JavaMethod -> Bool
 methodIsNative m =
@@ -983,7 +988,9 @@ prettyClass cl =
   showOnNewLines 2 (map show $ classMethods cl) ++
   "\n" ++
   "Source file: " ++
-  show (classSourceFile cl) ++ "\n" ++ "Attributes:\n" ++ showOnNewLines 2 (map show $ classAttributes cl)
+  show (classSourceFile cl) ++ "\n" ++ "Attributes:\n" ++ showOnNewLines 2 (map show attributeList) ++ "\n"
+  where
+    attributeList = map snd (Map.toList (classAttributes cl))
 
 -- | Binary parser for classes.
 getClass :: Get JavaClass
@@ -1023,7 +1030,7 @@ getClass = do
          [bytes] -> Just $ poolUtf8 cp $ runGet getWord16be bytes
          []      -> Nothing
          _       -> error "internal: unexpected source file form")
-      userAttrs
+      (toAttrList userAttrs)
   where
     getReferenceName cp = do
       index <- getWord16be

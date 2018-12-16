@@ -49,7 +49,7 @@ data JavaClass = JavaClass
   , classFields            :: [JavaField]
   , classMethodMap         :: Map MethodId JavaMethod
   , classSourceFile        :: Maybe String
-  , classAttributes        :: [Attribute]
+  , classAttributes        :: Map String Attribute
   } deriving (Show)
 
 ----------------------------------------------------------------------
@@ -68,7 +68,7 @@ data JavaField = JavaField
   , fieldIsDeprecated  :: Bool
   , fieldIsEnum        :: Bool
   , fieldSignature     :: Maybe String
-  , fieldAttributes    :: [Attribute]
+  , fieldAttributes    :: Map String Attribute
   } deriving (Show)
 
 ----------------------------------------------------------------------
@@ -91,7 +91,7 @@ data JavaMethod = JavaMethod
   , methodIsDeprecated   :: Bool
   , methodBody           :: MethodBody
   , methodExceptions     :: Maybe [JavaType]
-  , methodAttributes     :: [Attribute]
+  , methodAttributes     :: Map String Attribute
   } deriving (Eq, Show)
 
 instance Ord JavaMethod where
@@ -126,7 +126,7 @@ data MethodBody
          , codeExceptions     :: [ExceptionTableEntry]
          , codeLineNumbers    :: LineNumberTable
          , codeLocalVariables :: LocalVariableTable
-         , codeAttributes     :: [Attribute] }
+         , codeAttributes     :: Map String Attribute }
   | AbstractMethod
   | NativeMethod
   deriving (Eq, Show)

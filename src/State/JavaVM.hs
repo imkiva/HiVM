@@ -3,6 +3,7 @@
 module State.JavaVM where
 
 import           ClassPath.Base
+import           ClassPath.ControlFlowGraph
 import           ClassPath.Types
 import           Control.Concurrent
 import           Control.Concurrent.STM
@@ -11,8 +12,8 @@ import           Control.Monad.Except
 import           Control.Monad.State
 import           Data.Array.IO
 import           Data.IORef
-import           Data.List              (foldl')
-import qualified Data.Map               as M
+import           Data.List                  (foldl')
+import qualified Data.Map                   as M
 import           Data.Typeable
 import           Utils.UniqueId
 
@@ -147,6 +148,15 @@ getCurrentClass = getFrameCurrentClass <$> getTopFrame
 
 getCurrentMethod :: JavaContext JavaMethod
 getCurrentMethod = getFrameCurrentMethod <$> getTopFrame
+
+getCurrentCodeInfo :: JavaContext ControlFlowGraph
+getCurrentCodeInfo = codeControlFlow . methodBody <$> getCurrentMethod
+
+getCurrentMethodAttribute :: String -> JavaContext Attribute
+getCurrentMethodAttribute attrName = do
+  attrs <- methodAttributes <$> getCurrentMethod
+  let Just attr = M.lookup attrName attrs
+  return attr
 
 ----------------------------------------------------------------------
 setVmClassLoader :: JavaVM -> ClassLoader -> JavaVM
