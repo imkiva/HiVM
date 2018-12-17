@@ -143,6 +143,9 @@ putPC fpc = getTopFrame >>= (liftIO . flip writeIORef fpc . getFramePc)
 increasePC :: PC -> JavaContext ()
 increasePC n = getPC >>= (\fpc -> putPC $ fpc + n)
 
+nextPC :: JavaContext ()
+nextPC = increasePC 1
+
 getFP :: JavaContext Int
 getFP = getTopFrame >>= (liftIO . readIORef . getFramePointer)
 

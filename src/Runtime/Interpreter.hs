@@ -11,7 +11,7 @@ import           State.JavaVM
 dispatch :: Instruction -> JavaContext (Bool, JavaValue)
 dispatch InstructionError = throwError "Unknown instruction"
 
-dispatch Nop = increasePC 1 >> return (True, JNullValue)
+dispatch Nop = nextPC >> return (True, JNullValue)
 
 dispatch Aaload = do
   (JIntValue index) <- popOperand
@@ -21,7 +21,7 @@ dispatch Aaload = do
       (JArrayValue array) <- readIORef arrayRef
       readArray array index
   pushOperand element
-  increasePC 1
+  nextPC
   return (True, JNullValue)
 
 dispatch Aastore = do
@@ -31,12 +31,12 @@ dispatch Aastore = do
   liftIO $ do
     (JArrayValue array) <- readIORef arrayRef
     writeArray array index element
-  increasePC 1
+  nextPC
   return (True, JNullValue)
 
 dispatch AconstNull = do
   pushOperand JNullValue
-  increasePC 1
+  nextPC
   return (True, JNullValue)
 
 dispatch _ = throwError "Work in progress"
