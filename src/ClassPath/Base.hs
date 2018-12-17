@@ -99,6 +99,7 @@ data JavaType
   | JavaIntType
   | JavaLongType
   | JavaShortType
+  | JavaVoidType
   deriving (Eq, Ord)
 
 javaStringType :: JavaType
@@ -120,7 +121,7 @@ equivToInt32 JavaByteType    = True
 equivToInt32 JavaCharType    = True
 equivToInt32 JavaIntType     = True
 equivToInt32 JavaShortType   = True
-equivToInt32 _           = False
+equivToInt32 _               = False
 
 -- | Returns true if Java type is a primitive type.  Primitive types are
 -- the Boolean type or numeric types.
@@ -133,7 +134,7 @@ isPrimitiveType JavaFloatType   = True
 isPrimitiveType JavaIntType     = True
 isPrimitiveType JavaLongType    = True
 isPrimitiveType JavaShortType   = True
-isPrimitiveType _           = False
+isPrimitiveType _               = False
 
 -- | Returns number of bits that a Java type is expected to take on the stack.
 -- | Type should be a primitive type.
@@ -147,19 +148,19 @@ stackWidth JavaFloatType   = 32
 stackWidth JavaIntType     = 32
 stackWidth JavaLongType    = 64
 stackWidth JavaShortType   = 32
-stackWidth _           = error "internal: illegal type"
+stackWidth _               = error "internal: illegal type"
 
 -- | Returns true if Java type denotes a floating point.
 isFloatType :: JavaType -> Bool
 isFloatType JavaFloatType  = True
 isFloatType JavaDoubleType = True
-isFloatType _          = False
+isFloatType _              = False
 
 -- | Returns true if Java type denotes a reference (i.e. array or class).
 isRefType :: JavaType -> Bool
 isRefType (JavaArrayType _) = True
 isRefType (JavaClassType _) = True
-isRefType _             = False
+isRefType _                 = False
 
 -- | Java Field
 data FieldId = FieldId
@@ -180,7 +181,8 @@ data MethodId = MethodId
   } deriving (Eq, Ord, Show)
 
 prettyMethodId :: MethodId -> Doc
-prettyMethodId (MethodId name params ret) = text name <> (parens . commas . map prettyJavaType) params <> maybe "void" prettyJavaType ret
+prettyMethodId (MethodId name params ret) =
+  text name <> (parens . commas . map prettyJavaType) params <> maybe "void" prettyJavaType ret
   where
     commas = sep . punctuate comma
 
@@ -451,7 +453,7 @@ nextPcPrim stream pc = findNext stream (pc + 1)
   where
     findNext is i =
       case is ! i of
-        Just _ -> i
+        Just _  -> i
         Nothing -> findNext is (i + 1)
 
 safeNextPcPrim :: InstructionStream -> PC -> Maybe PC

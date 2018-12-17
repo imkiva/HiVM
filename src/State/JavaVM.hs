@@ -35,7 +35,7 @@ data JavaThread = JavaThread
 
 data JavaFrame = JavaFrame
   { getFrameCurrentClass  :: JavaClass
-  , getFrameSlots         :: IOArray Int JavaType
+  , getFrameSlots         :: IOArray Int JavaValue
   , getFramePc            :: IORef PC
   , getFramePointer       :: IORef Int
   , getFrameCurrentMethod :: JavaMethod
@@ -61,11 +61,11 @@ type JavaClassPool = M.Map JavaClassName JavaClassOop
 data JavaClassOop = JavaClassOop
   { getOopClass        :: JavaClass
   , getOopClassLoader  :: ClassLoader
-  , getOopStaticFields :: M.Map FieldId (IORef JavaType)
+  , getOopStaticFields :: M.Map FieldId (IORef JavaValue)
   }
 
 data JavaOop = JavaOop
-  { getInstanceOopFields :: M.Map String (M.Map (String, String) (IORef JavaType))
+  { getInstanceOopFields :: M.Map String (M.Map (String, String) (IORef JavaValue))
   , getInstanceOopMutex :: MVar Bool
   , getInstanceOopClass :: JavaClass
   }
@@ -73,9 +73,24 @@ data JavaOop = JavaOop
 data JavaException = JavaException
   { getExceptionThread :: JavaThread
   , getRawException    :: Either String SomeException
-  , getExceptionType   :: JavaType
+  , getExceptionType   :: JavaValue
   , getExceptionStack  :: [String]
   } deriving (Typeable)
+
+data JavaValue
+  = JNullValue
+  | JByteValue Int
+  | JCharValue Char
+  | JShortValue Int
+  | JBoolValue Bool
+  | JIntValue Int
+  | JLongValue Integer
+  | JFloatValue Float
+  | JDoubleValue Double
+  | JObjectValue JavaOop
+  | JArrayValue (IOArray Int JavaValue)
+  | JRefValue (IORef JavaValue)
+  deriving (Eq)
 
 instance Show JavaException where
   show JavaException {..} = show getRawException ++ foldl' (\acc s -> acc ++ show s ++ "\n") "" getExceptionStack
@@ -113,10 +128,10 @@ getTopFrame = getStack >>= (\(f:_) -> return f)
 popFrame :: JavaContext ()
 popFrame = getStack >>= (\(_:st) -> putStack st)
 
-readFrame :: Int -> JavaContext JavaType
+readFrame :: Int -> JavaContext JavaValue
 readFrame i = getTopFrame >>= (liftIO . flip readArray i . getFrameSlots)
 
-writeFrame :: Int -> JavaType -> JavaContext ()
+writeFrame :: Int -> JavaValue -> JavaContext ()
 writeFrame i o = getTopFrame >>= (\top -> liftIO $ writeArray (getFrameSlots top) i o)
 
 getPC :: JavaContext PC
@@ -137,10 +152,10 @@ putFP ffp = getTopFrame >>= (liftIO . flip writeIORef ffp . getFramePointer)
 increaseFP :: Int -> JavaContext ()
 increaseFP n = getFP >>= (\fp -> putFP $ fp + n)
 
-pushOperand :: JavaType -> JavaContext ()
+pushOperand :: JavaValue -> JavaContext ()
 pushOperand o = getFP >>= (`writeFrame` o) >> increaseFP 1
 
-popOperand :: JavaContext JavaType
+popOperand :: JavaContext JavaValue
 popOperand = increaseFP (-1) >> getFP >>= readFrame
 
 getCurrentClass :: JavaContext JavaClass
