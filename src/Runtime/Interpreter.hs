@@ -6,7 +6,6 @@ import           ClassPath.Base
 import           Control.Monad.Except
 import           Data.Array.IO        (getBounds, readArray, writeArray)
 import           Data.IORef           (readIORef)
-import           Data.Word
 import           State.JavaVM
 
 toIndex :: LocalVariableIndex -> Int
