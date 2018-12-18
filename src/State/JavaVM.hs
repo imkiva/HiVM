@@ -128,11 +128,11 @@ getTopFrame = getStack >>= (\(f:_) -> return f)
 popFrame :: JavaContext ()
 popFrame = getStack >>= (\(_:st) -> putStack st)
 
-readFrame :: Int -> JavaContext JavaValue
-readFrame i = getTopFrame >>= (liftIO . flip readArray i . getFrameSlots)
+readLocal :: Int -> JavaContext JavaValue
+readLocal i = getTopFrame >>= (liftIO . flip readArray i . getFrameSlots)
 
-writeFrame :: Int -> JavaValue -> JavaContext ()
-writeFrame i o = getTopFrame >>= (\top -> liftIO $ writeArray (getFrameSlots top) i o)
+writeLocal :: Int -> JavaValue -> JavaContext ()
+writeLocal i o = getTopFrame >>= (\top -> liftIO $ writeArray (getFrameSlots top) i o)
 
 getPC :: JavaContext PC
 getPC = getTopFrame >>= (liftIO . readIORef . getFramePc)
@@ -156,10 +156,10 @@ increaseFP :: Int -> JavaContext ()
 increaseFP n = getFP >>= (\fp -> putFP $ fp + n)
 
 pushOperand :: JavaValue -> JavaContext ()
-pushOperand o = getFP >>= (`writeFrame` o) >> increaseFP 1
+pushOperand o = getFP >>= (`writeLocal` o) >> increaseFP 1
 
 popOperand :: JavaContext JavaValue
-popOperand = increaseFP (-1) >> getFP >>= readFrame
+popOperand = increaseFP (-1) >> getFP >>= readLocal
 
 getCurrentClass :: JavaContext JavaClass
 getCurrentClass = getFrameCurrentClass <$> getTopFrame
