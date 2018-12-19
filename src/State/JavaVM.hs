@@ -16,6 +16,7 @@ import           Data.List                  (foldl')
 import qualified Data.Map                   as M
 import           Data.Maybe
 import           Data.Typeable
+import           Data.Word                  (Word16)
 
 type ErrorMessage = String
 
@@ -175,6 +176,25 @@ getCurrentMethodAttribute attrName = do
   attrs <- methodAttributes <$> getCurrentMethod
   let Just attr = M.lookup attrName attrs
   return attr
+
+getCurrentStackTrace :: JavaContext [String]
+getCurrentStackTrace = do
+  thread <- get
+  let stackList = getThreadStack thread
+  return (printStackTrace stackList)
+
+printStackTrace :: [JavaFrame] -> [String]
+printStackTrace = map prettyJavaFrame
+
+prettyJavaFrame :: JavaFrame -> String
+prettyJavaFrame frame = unwords [clsName, ".", methodName, "(", classSource, ")"]
+  where
+    method = getFrameCurrentMethod frame
+    mid = methodId method
+    cls = getFrameCurrentClass frame
+    methodName = methodIdName mid
+    clsName = unpackClassName (className cls)
+    classSource = fromMaybe "Unknwon Source" (classSourceFile cls)
 
 getInstruction :: JavaContext Instruction
 getInstruction = do

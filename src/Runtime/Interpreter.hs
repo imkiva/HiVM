@@ -3,7 +3,9 @@ module Runtime.Interpreter
   ) where
 
 import           ClassPath.Base
+import           Control.Exception    (throw)
 import           Control.Monad.Except
+import           Control.Monad.State  (get)
 import           Data.Array.IO        (getBounds, readArray, writeArray)
 import           Data.IORef           (readIORef)
 import           State.JavaVM
@@ -67,5 +69,11 @@ dispatch (Astore local) = do
   writeLocal (toIndex local) v
   increasePC 2
   return (True, JNullValue)
+-- |
+dispatch Athrow = do
+  exceptionOop <- popOperand
+  thread <- get
+  traces <- getCurrentStackTrace
+  throw $ JavaException thread (Left "Exception") exceptionOop traces
 -- |
 dispatch _ = throwError "Work in progress"
