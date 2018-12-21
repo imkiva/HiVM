@@ -473,6 +473,7 @@ instance Show JavaType where
   show (JavaClassType cn) = slashesToDots (unpackClassName cn)
   show JavaShortType      = "short"
   show JavaBooleanType    = "boolean"
+  show JavaVoidType       = "void"
   show (JavaArrayType tp) = show tp ++ "[]"
 
 prettyJavaType :: JavaType -> Doc

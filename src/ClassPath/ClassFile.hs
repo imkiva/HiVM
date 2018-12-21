@@ -148,6 +148,7 @@ unparseMethodDescriptor (MethodId _ paramTys retTy) =
     typeToDesc JavaIntType        = "I"
     typeToDesc JavaLongType       = "J"
     typeToDesc JavaShortType      = "S"
+    typeToDesc JavaVoidType       = "V"
 
 -- | Returns method key with the given name and descriptor.
 makeMethodId ::
