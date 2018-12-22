@@ -7,6 +7,7 @@ import           Control.Exception    (throw)
 import           Control.Monad.Except
 import           Control.Monad.State  (get)
 import           Data.Array.IO        (getBounds, readArray, writeArray)
+import           Data.Binary
 import           Data.IORef           (readIORef)
 import           State.JavaVM
 
@@ -134,4 +135,26 @@ dispatch Athrow = do
   traces <- getCurrentStackTrace
   throw $ JavaException thread (Left "Exception") exceptionOop traces
 -- |
+dispatch (Checkcast targetType)
+  -- TODO: check cast
+ = do
+  nextPC
+  return (True, JNullValue)
+-- | casts
+dispatch D2i = do
+  (JDoubleValue v) <- popOperand
+  pushOperand $ JIntValue $ (fromInteger . toInteger . doubleToWord) v
+  nextPC
+  return (True, JNullValue)
+dispatch D2l = do
+  (JDoubleValue v) <- popOperand
+  pushOperand $ JLongValue $ (toInteger . doubleToWord) v
+  nextPC
+  return (True, JNullValue)
+dispatch D2f = do
+  (JDoubleValue v) <- popOperand
+  pushOperand $ JFloatValue $ (wordToFloat . fromInteger . toInteger . doubleToWord) v
+  nextPC
+  return (True, JNullValue)
+-- | wip
 dispatch _ = throwError "Work in progress"
