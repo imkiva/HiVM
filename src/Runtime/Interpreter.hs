@@ -7,7 +7,7 @@ import           Control.Exception    (throw)
 import           Control.Monad.Except
 import           Control.Monad.State  (get)
 import           Data.Array.IO        (getBounds, readArray, writeArray)
-import           Data.Binary
+import qualified Data.Binary.IEEE754  as Binary
 import           Data.IORef           (readIORef)
 import           State.JavaVM
 
@@ -143,17 +143,17 @@ dispatch (Checkcast targetType)
 -- | casts
 dispatch D2i = do
   (JDoubleValue v) <- popOperand
-  pushOperand $ JIntValue $ (fromInteger . toInteger . doubleToWord) v
+  pushOperand $ JIntValue $ (fromInteger . toInteger . Binary.doubleToWord) v
   nextPC
   return (True, JNullValue)
 dispatch D2l = do
   (JDoubleValue v) <- popOperand
-  pushOperand $ JLongValue $ (toInteger . doubleToWord) v
+  pushOperand $ JLongValue $ (toInteger . Binary.doubleToWord) v
   nextPC
   return (True, JNullValue)
 dispatch D2f = do
   (JDoubleValue v) <- popOperand
-  pushOperand $ JFloatValue $ (wordToFloat . fromInteger . toInteger . doubleToWord) v
+  pushOperand $ JFloatValue $ (Binary.wordToFloat . fromInteger . toInteger . Binary.doubleToWord) v
   nextPC
   return (True, JNullValue)
 -- | wip
