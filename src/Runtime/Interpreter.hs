@@ -8,6 +8,8 @@ import           Control.Monad.Except
 import           Control.Monad.State  (get)
 import           Data.Array.IO        (getBounds, readArray, writeArray)
 import qualified Data.Binary.IEEE754  as Binary
+import           Data.Bits            (shift, shiftR, xor, (.&.), (.|.))
+import           Data.Fixed           (mod')
 import           Data.IORef           (readIORef)
 import           State.JavaVM
 
@@ -74,13 +76,76 @@ arrayStore typeChecker = do
   nextPC
   return (True, JNullValue)
 
+doIntMath :: (Int -> Int -> Int) -> JavaContext (Bool, JavaValue)
+doIntMath f = do
+  (JIntValue lhs) <- popOperand
+  (JIntValue rhs) <- popOperand
+  pushOperand (JIntValue (f lhs rhs))
+  nextPC
+  return (True, JNullValue)
+
+doFloatMath :: (Float -> Float -> Float) -> JavaContext (Bool, JavaValue)
+doFloatMath f = do
+  (JFloatValue lhs) <- popOperand
+  (JFloatValue rhs) <- popOperand
+  pushOperand (JFloatValue (f lhs rhs))
+  nextPC
+  return (True, JNullValue)
+
+doLongMath :: (Integer -> Integer -> Integer) -> JavaContext (Bool, JavaValue)
+doLongMath f = do
+  (JLongValue lhs) <- popOperand
+  (JLongValue rhs) <- popOperand
+  pushOperand (JLongValue (f lhs rhs))
+  nextPC
+  return (True, JNullValue)
+
+doDoubleMath :: (Double -> Double -> Double) -> JavaContext (Bool, JavaValue)
+doDoubleMath f = do
+  (JDoubleValue lhs) <- popOperand
+  (JDoubleValue rhs) <- popOperand
+  pushOperand (JDoubleValue (f lhs rhs))
+  nextPC
+  return (True, JNullValue)
+
+doUnaryIntMath :: (Int -> Int) -> JavaContext (Bool, JavaValue)
+doUnaryIntMath f = do
+  (JIntValue lhs) <- popOperand
+  pushOperand (JIntValue (f lhs))
+  nextPC
+  return (True, JNullValue)
+
+doUnaryFloatMath :: (Float -> Float) -> JavaContext (Bool, JavaValue)
+doUnaryFloatMath f = do
+  (JFloatValue lhs) <- popOperand
+  pushOperand (JFloatValue (f lhs))
+  nextPC
+  return (True, JNullValue)
+
+doUnaryLongMath :: (Integer -> Integer) -> JavaContext (Bool, JavaValue)
+doUnaryLongMath f = do
+  (JLongValue lhs) <- popOperand
+  pushOperand (JLongValue (f lhs))
+  nextPC
+  return (True, JNullValue)
+
+doUnaryDoubleMath :: (Double -> Double) -> JavaContext (Bool, JavaValue)
+doUnaryDoubleMath f = do
+  (JDoubleValue lhs) <- popOperand
+  pushOperand (JDoubleValue (f lhs))
+  nextPC
+  return (True, JNullValue)
+
+ushiftR :: (Integral a) => a -> Int -> a
+ushiftR n k = fromIntegral (fromIntegral n `shiftR` k :: Word)
+
 -- | Decode-Dispatch Interpreter
 dispatch :: Instruction -> JavaContext (Bool, JavaValue)
 -- |
 dispatch InstructionError = throwError "Unknown instruction"
 -- |
 dispatch Nop = nextPC >> return (True, JNullValue)
--- | array load
+-- | Array manipulating instructions
 dispatch Aaload = arrayLoad refType
 dispatch Baload = arrayLoad boolByteType
 dispatch Caload = arrayLoad charType
@@ -89,7 +154,6 @@ dispatch Faload = arrayLoad floatType
 dispatch Iaload = arrayLoad intType
 dispatch Laload = arrayLoad longType
 dispatch Saload = arrayLoad shortType
--- | array store
 dispatch Aastore = arrayStore refType
 dispatch Bastore = arrayStore boolByteType
 dispatch Castore = arrayStore charType
@@ -135,12 +199,11 @@ dispatch Athrow = do
   traces <- getCurrentStackTrace
   throw $ JavaException thread (Left "Exception") exceptionOop traces
 -- |
-dispatch (Checkcast targetType)
-  -- TODO: check cast
- = do
+-- TODO: check cast
+dispatch (Checkcast targetType) = do
   nextPC
   return (True, JNullValue)
--- | casts
+-- | Cast instructions
 dispatch D2i = do
   (JDoubleValue v) <- popOperand
   pushOperand $ JIntValue $ (fromInteger . toInteger . Binary.doubleToWord) v
@@ -156,5 +219,42 @@ dispatch D2f = do
   pushOperand $ JFloatValue $ (Binary.wordToFloat . fromInteger . toInteger . Binary.doubleToWord) v
   nextPC
   return (True, JNullValue)
+-- | Mathematical instructions
+dispatch Dadd = doDoubleMath (+)
+dispatch Dsub = doDoubleMath (-)
+dispatch Dmul = doDoubleMath (*)
+dispatch Ddiv = doDoubleMath (/)
+dispatch Drem = doDoubleMath mod'
+dispatch Fadd = doFloatMath (+)
+dispatch Fsub = doFloatMath (-)
+dispatch Fmul = doFloatMath (*)
+dispatch Fdiv = doFloatMath (/)
+dispatch Frem = doFloatMath mod'
+dispatch Iadd = doIntMath (+)
+dispatch Isub = doIntMath (-)
+dispatch Imul = doIntMath (*)
+dispatch Idiv = doIntMath div
+dispatch Irem = doIntMath rem
+dispatch Ladd = doLongMath (+)
+dispatch Lsub = doLongMath (-)
+dispatch Lmul = doLongMath (*)
+dispatch Ldiv = doLongMath div
+dispatch Lrem = doLongMath rem
+dispatch Iand = doIntMath (.&.)
+dispatch Land = doLongMath (.&.)
+dispatch Ishl = doIntMath shift
+dispatch Ishr = doIntMath shiftR
+dispatch Iushr = doIntMath ushiftR
+dispatch Lshl = doLongMath undefined -- TODO
+dispatch Lshr = doLongMath undefined -- TODO
+dispatch Lushr = doLongMath undefined -- TODO
+dispatch Ior = doIntMath (.|.)
+dispatch Lor = doLongMath (.|.)
+dispatch Ixor = doIntMath xor
+dispatch Lxor = doLongMath xor
+dispatch Dneg = doUnaryDoubleMath negate
+dispatch Fneg = doUnaryFloatMath negate
+dispatch Ineg = doUnaryIntMath negate
+dispatch Lneg = doUnaryLongMath negate
 -- | wip
 dispatch _ = throwError "Work in progress"
