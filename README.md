@@ -1,10 +1,12 @@
 # HiVM
 
 ## Roadmap (by priority)
-* Interpreter
-* JNI Support
-* Concurrent Garbage Collector
-* JVMTI Support
+- [x] Class file parser
+- [x] Java VM structure
+- [ ] Interpreter
+- [ ] JNI Support
+- [ ] Concurrent Garbage Collector
+- [ ] JVMTI Support
 
 ## Credit
 * [KiVM](https://github.com/imkiva/KiVM)
