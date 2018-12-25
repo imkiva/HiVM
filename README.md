@@ -1,4 +1,6 @@
 # HiVM
+The best way to learn something is to implement it yourself.
+Both Java and Haskell.
 
 ## Roadmap (by priority)
 - [x] Class File Parser
