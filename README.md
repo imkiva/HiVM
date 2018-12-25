@@ -1,8 +1,8 @@
 # HiVM
 
 ## Roadmap (by priority)
-- [x] Class file parser
-- [x] Java VM structure
+- [x] Class File Parser
+- [x] Java VM Model
 - [ ] Interpreter
 - [ ] JNI Support
 - [ ] Concurrent Garbage Collector
